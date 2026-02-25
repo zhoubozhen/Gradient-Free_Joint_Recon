@@ -1,0 +1,13 @@
+universe        = vanilla
+executable      = check_gpu.sh
+initialdir     = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/my_code
+
+output          = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/c06cluster/gpu_check.out
+error           = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/c06cluster/gpu_check.err
+log             = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/c06cluster/gpu_check.log
+
+request_gpus    = 1
+request_cpus    = 1
+request_memory  = 1024
+requirements    = (Machine == "anastasio-c06.bioen.illinois.edu")
+queue

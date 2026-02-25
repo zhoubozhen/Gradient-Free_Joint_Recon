@@ -1,0 +1,32 @@
+############################################################
+# 基本设置
+############################################################
+universe        = vanilla
+executable      = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/my_code/cluster_run_proxmode.sh
+getenv          = True
+
+############################################################
+# 资源请求
+############################################################
+request_gpus    = 2
+request_cpus    = 8
+request_memory  = 180000
+
+############################################################
+# 强制使用 A40 节点（最稳）
+############################################################
+requirements = (Machine == "anastasio-c06.bioen.illinois.edu")
+
+############################################################
+# 日志（写到你自己的目录）
+############################################################
+initialdir     = /home/bozhen2/transcranial_pact_devito_model/V2_tesla
+
+output         = c06cluster/condor_cluster_run_$(ClusterId)_$(ProcId).out
+error          = c06cluster/condor_cluster_run_$(ClusterId)_$(ProcId).err
+log            = c06cluster/condor_cluster_run_$(ClusterId)_$(ProcId).condor.log
+
+############################################################
+# 队列
+############################################################
+queue

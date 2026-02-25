@@ -1,0 +1,15 @@
+universe        = vanilla
+executable      = probe_nvhpc.sh
+initialdir      = /home/bozhen2/transcranial_pact_devito_model/V2_tesla/my_code
+
+output          = probe_nvhpc.out
+error           = probe_nvhpc.err
+log             = probe_nvhpc.log
+
+request_gpus    = 1
+request_cpus    = 1
+request_memory  = 2048
+
+requirements    = (Machine == "anastasio-c06.bioen.illinois.edu")
+
+queue
