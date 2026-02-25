@@ -1,0 +1,159 @@
+'''''
+author  - Seonyeong Park
+date    - Dec 17, 2021
+
+FISTA-TV
+
+Reference: 
+
+  * Beck A. and Teboulle M., “Fast gradient-based algorithms for constrained total variation
+    image denoising and deblurring problems,” IEEE Trans. Image Process., vol. 18, no. 11,
+    pp. 2419--2434 (2009) DOI: 10.1109/TIP.2009.2028250
+
+  * Beck A. and Teboulle M., “A fast iterative shrinkage-thresholding algorithm for linear 
+    inverse problems,” SIAM J. Imaging Sci., vol. 2, no. 1, pp. 183--202 (2009) DOI:
+    10.1137/080716542
+
+Note:
+
+  * The forward (line 61) and backward operation (line 76) depending on the user's choice (e.g. 
+    interpolation model, k-Wave) can be plugged in.
+
+  * `kgrid`, `medium`, `sensor`, and `input_args` are for use of k-Wave
+
+'''
+
+import os
+import math
+import numpy as np
+import scipy.io as sio
+import time
+from cost_func_tv import cost_func_tv
+from proximal_L_cupy_mix import *
+
+# FISTA-TV
+def fista_tv(pmeas, Nx, Ny, Nz, forward_op, adjoint_op, roi, reg_param, lip,\
+             positive_constraint, niter_max, cost_min, saving_dir,\
+             prox_iter=50, out_print=True, start_time=None, time_limit=None,\
+             init_guess=None, mpi_rank=0, use_check=False, use_past=False, check_iter=5, **args):
+
+  if mpi_rank==0 and out_print:
+    print('FISTA-TV starts ...')
+
+  pest = np.zeros(pmeas.shape, dtype=np.float32)
+
+  fname = os.path.join(saving_dir, 'checkpoint.mat')
+  if not os.path.exists(fname):
+    use_check = False
+
+  if use_check:
+    checkpoint = sio.loadmat(fname)
+    start_iter = checkpoint['iter'][0][0]+1
+    tp = checkpoint['tp'][0][0]
+    p0y = checkpoint['p0y']
+    p0p = checkpoint['p0p']
+    cost = checkpoint['cost']
+    if cost.shape[0]<niter_max:
+      old_cost = cost.copy()
+      cost = np.zeros((niter_max, 1))
+      cost[:old_cost.shape[0],0] = old_cost[:,0]
+  else:
+    start_iter = 1
+    tp  = 1
+    if init_guess is not None:
+      p0y = init_guess.copy().reshape(Nx, Ny, Nz)
+      p0p = init_guess.copy().reshape(Nx, Ny, Nz)
+    else:
+      p0p = np.zeros((Nx, Ny, Nz), dtype=np.float32)
+      p0y = np.zeros((Nx, Ny, Nz), dtype=np.float32)
+    cost = np.zeros((niter_max, 1))
+
+  if use_past:
+    fname = os.path.join(saving_dir, 'cost_function_lip_' + '{:.0e}'.format(lip) + '.mat')
+    old_cost = sio.loadmat(fname)['cost']
+    cost[:old_cost.shape[0],0] = old_cost[:,0]
+    for iter in range(start_iter, niter_max + 1):
+      iter_start_time = time.time()
+      if mpi_rank==0 and out_print:
+        print('[ Iteration ' + str(iter) + ' ]')
+      fname = os.path.join(saving_dir, 'p0_iter_' + str(iter) + '.DAT')
+      if not os.path.exists(fname):
+        start_iter = iter
+        break
+      p0 = np.fromfile(fname,dtype=np.float32).reshape(Nx, Ny, Nz)
+      tn = (1 + math.sqrt(1 + 4*tp**2))/2
+      p0y = p0 + ((tp - 1)/tn)*(p0 - p0p)
+      tp = tn
+      p0p = p0
+
+      iter_end_time = time.time()
+      if mpi_rank==0 and out_print:
+        print(f'This iteration takes {iter_end_time-iter_start_time}')
+        iter_start_time = iter_end_time
+
+  for iter in range(start_iter, niter_max + 1):
+    iter_start_time = time.time()
+    if mpi_rank==0 and out_print:
+      print('[ Iteration ' + str(iter) + ' ]')
+
+    if iter > 1 or init_guess is not None:
+      if mpi_rank==0 and out_print:
+        print('    Forward propagarion...')
+      ## REPLACE the following line with forward propagation
+      pest = forward_op(p0y[roi>0])
+
+    # Cost function
+    if mpi_rank==0 and out_print:
+      print('    Cost function...')
+    costn = cost_func_tv(pmeas, pest, reg_param, p0y, Nx, Ny, Nz)
+    if mpi_rank==0 and out_print:
+      print('        cost_y: ' + '{:.4g}'.format(costn))
+    cost[iter - 1] = costn
+    fname = os.path.join(saving_dir, 'cost_function_lip_' + '{:.0e}'.format(lip) + '.mat')
+    if mpi_rank==0:
+      try:
+        sio.savemat(fname, {'cost': cost})
+      except:
+        print('cannot save cost function, but keep iteration')
+
+    # Backward propagation
+    if mpi_rank==0 and out_print:
+      print('    Backward propagation...')
+    pest = pest - pmeas
+    ## REPLACE the following line with backward propagation
+    dp0 = adjoint_op(pest).reshape((Nx, Ny, Nz))
+    # dp0 = np.ones((Nx, Ny, Nz),dtype=np.float32)
+    dp0[roi==0] = 0
+
+    # Apply the TV proximal operator (Equations 3.13/3.14 in FISTA paper)
+    if mpi_rank==0 and out_print:
+      print('    TV proximal operator...')
+    proxi_start = time.time()
+    p0 = proximal_L(p0y -  (2/lip)*dp0, Nx, Ny, Nz, 2*reg_param/lip, positive_constraint, prox_iter)
+    proxi_end = time.time()
+    if mpi_rank==0 and out_print:
+      print(f'This proximal takes {proxi_end-proxi_start}')
+
+    # Weight at next iteration  (Equation 3.15 in FISTA paper)
+    tn = (1 + math.sqrt(1 + 4*tp**2))/2
+
+    # Equation 3.16 in FISTA paper
+    p0y = p0 + ((tp - 1)/tn)*(p0 - p0p)
+    if mpi_rank==0:
+      fname = os.path.join(saving_dir, 'p0_iter_' + str(iter) + '.DAT')
+      try:
+        p0.ravel().astype(np.float32).tofile(fname)
+      except OSError as err:
+        print(err)
+        print("cannot save, but keep iteration")
+    tp = tn
+    p0p = p0
+
+    iter_end_time = time.time()
+    if mpi_rank==0 and out_print:
+      print(f'This iteration takes {iter_end_time-iter_start_time}')
+
+    if mpi_rank==0 and iter%check_iter==0:
+      fname = os.path.join(saving_dir, 'checkpoint.mat')
+      mdic = {'p0y': p0y, 'p0p': p0p, 'tp': tp, 'iter': iter, 'cost': cost}
+      sio.savemat(fname,mdic)
