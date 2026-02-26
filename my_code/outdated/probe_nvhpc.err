@@ -1,0 +1,162 @@
+++ hostname
++ echo HOST=anastasio-c06.bioen.illinois.edu
++ echo SHELL=/bin/bash
++ echo 'PATH(before)=/usr/local/bin:/usr/bin'
++ set +u
++ source /etc/profile.d/modules.sh
+++ . /etc/profile.d/00-modulepath.sh
++++ '[' -z '' ']'
++++ export MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles
++++ MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles
+++ '[' -z '' ']'
+++ LMOD_ALLOW_ROOT_USE=yes
+++ '[' -n '' ']'
+++ '[' yes '!=' yes ']'
+++ '[' -z '' ']'
+++ export MODULEPATH_ROOT=/usr/share/modulefiles
+++ MODULEPATH_ROOT=/usr/share/modulefiles
+++ export USER=
+++ USER=
++++ uname
+++ export LMOD_sys=Linux
+++ LMOD_sys=Linux
+++ '[' -z '' ']'
+++ '[' -f /etc/lmod/.modulespath ']'
+++ LMOD_MODULEPATH_INIT=/usr/share/lmod/lmod/init/.modulespath
+++ '[' -f /usr/share/lmod/lmod/init/.modulespath ']'
++++ /usr/share/lmod/lmod/libexec/addto --append MODULEPATH /usr/share/modulefiles/Linux /usr/share/modulefiles/Core
+++ export MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles:/usr/share/modulefiles/Linux:/usr/share/modulefiles/Core
+++ MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles:/usr/share/modulefiles/Linux:/usr/share/modulefiles/Core
++++ /usr/share/lmod/lmod/libexec/addto --append MODULEPATH /usr/share/lmod/lmod/modulefiles/Core
+++ export MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles:/usr/share/modulefiles/Linux:/usr/share/modulefiles/Core:/usr/share/lmod/lmod/modulefiles/Core
+++ MODULEPATH=/usr/share/modulefiles:/usr/share/Modules/modulefiles:/usr/share/modulefiles/Linux:/usr/share/modulefiles/Core:/usr/share/lmod/lmod/modulefiles/Core
+++ '[' -n '' ']'
+++ '[' -z '' ']'
+++ export BASH_ENV=/usr/share/lmod/lmod/init/bash
+++ BASH_ENV=/usr/share/lmod/lmod/init/bash
+++ '[' -z '' ']'
+++ export MANPATH=:
+++ MANPATH=:
++++ /usr/share/lmod/lmod/libexec/addto MANPATH /usr/share/lmod/lmod/share/man
+++ export MANPATH=/usr/share/lmod/lmod/share/man:
+++ MANPATH=/usr/share/lmod/lmod/share/man:
+++ findExec READLINK_CMD /usr/bin/readlink readlink
+++ Nm=READLINK_CMD
+++ confPath=/usr/bin/readlink
+++ execNm=readlink
+++ eval READLINK_CMD=/usr/bin/readlink
++++ READLINK_CMD=/usr/bin/readlink
+++ '[' '!' -x /usr/bin/readlink ']'
+++ unset Nm confPath execNm
+++ findExec PS_CMD /usr/bin/ps ps
+++ Nm=PS_CMD
+++ confPath=/usr/bin/ps
+++ execNm=ps
+++ eval PS_CMD=/usr/bin/ps
++++ PS_CMD=/usr/bin/ps
+++ '[' '!' -x /usr/bin/ps ']'
+++ unset Nm confPath execNm
+++ findExec EXPR_CMD /usr/bin/expr expr
+++ Nm=EXPR_CMD
+++ confPath=/usr/bin/expr
+++ execNm=expr
+++ eval EXPR_CMD=/usr/bin/expr
++++ EXPR_CMD=/usr/bin/expr
+++ '[' '!' -x /usr/bin/expr ']'
+++ unset Nm confPath execNm
+++ findExec BASENAME_CMD /usr/bin/basename basename
+++ Nm=BASENAME_CMD
+++ confPath=/usr/bin/basename
+++ execNm=basename
+++ eval BASENAME_CMD=/usr/bin/basename
++++ BASENAME_CMD=/usr/bin/basename
+++ '[' '!' -x /usr/bin/basename ']'
+++ unset Nm confPath execNm
+++ unset -f findExec
+++ '[' -f /proc/932185/exe ']'
++++ /usr/bin/readlink /proc/932185/exe
+++ my_shell=/usr/bin/bash
++++ /usr/bin/expr /usr/bin/bash : '-*\(.*\)'
+++ my_shell=/usr/bin/bash
++++ /usr/bin/basename /usr/bin/bash
+++ my_shell=bash
+++ case ${my_shell} in
+++ '[' -f /usr/share/lmod/lmod/init/bash ']'
+++ . /usr/share/lmod/lmod/init/bash
++++ '[' -z '' ']'
++++ case "$-" in
++++ __lmod_vx=x
++++ '[' -n x ']'
++++ set +x
+Shell debugging temporarily silenced: export LMOD_SH_DBG_ON=1 for this output (/usr/share/lmod/lmod/init/bash)
+Shell debugging restarted
++++ unset __lmod_vx
+++ unset my_shell PS_CMD EXPR_CMD BASENAME_CMD MODULEPATH_INIT LMOD_ALLOW_ROOT_USE READLINK_CMD
++ set -u
++ module purge
++ '[' -z '' ']'
++ case "$-" in
++ __lmod_sh_dbg=x
++ '[' -n x ']'
++ set +x
+Shell debugging temporarily silenced: export LMOD_SH_DBG_ON=1 for Lmod's output
+Shell debugging restarted
++ unset __lmod_sh_dbg
++ return 0
++ module load nvidia-hpc-sdk-multi/25.1-rh8
++ '[' -z '' ']'
++ case "$-" in
++ __lmod_sh_dbg=x
++ '[' -n x ']'
++ set +x
+Shell debugging temporarily silenced: export LMOD_SH_DBG_ON=1 for Lmod's output
+Lmod has detected the following error: The following module(s) are unknown:
+"nvidia-hpc-sdk-multi/25.1-rh8"
+
+Please check the spelling or version number. Also try "module spider ..."
+It is also possible your cache file is out-of-date; it may help to try:
+  $ module --ignore_cache load "nvidia-hpc-sdk-multi/25.1-rh8"
+
+Also make sure that all modulefiles written in TCL start with the string
+#%Module
+
+
+
+Shell debugging restarted
++ unset __lmod_sh_dbg
++ return 1
++ module load cuda-toolkit/12.2
++ '[' -z '' ']'
++ case "$-" in
++ __lmod_sh_dbg=x
++ '[' -n x ']'
++ set +x
+Shell debugging temporarily silenced: export LMOD_SH_DBG_ON=1 for Lmod's output
+Lmod has detected the following error: The following module(s) are unknown:
+"cuda-toolkit/12.2"
+
+Please check the spelling or version number. Also try "module spider ..."
+It is also possible your cache file is out-of-date; it may help to try:
+  $ module --ignore_cache load "cuda-toolkit/12.2"
+
+Also make sure that all modulefiles written in TCL start with the string
+#%Module
+
+
+
+Shell debugging restarted
++ unset __lmod_sh_dbg
++ return 1
++ echo 'PATH(after)=/usr/local/bin:/usr/bin'
++ type module
++ which nvc
+which: no nvc in ((null))
++ true
++ which nvc++
+which: no nvc++ in ((null))
++ true
++ nvc++ --version
+/srv/condor/execute/dir_932180/probe_nvhpc.sh: line 24: nvc++: command not found
++ true
++ python -
+/srv/condor/execute/dir_932180/probe_nvhpc.sh: line 26: python: command not found

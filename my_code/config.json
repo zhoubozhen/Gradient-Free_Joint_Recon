@@ -1,0 +1,53 @@
+{
+  "binding": {
+    "main_gpu_idx": 6,
+    "prox_gpu_idx": 7
+  },
+
+  "reg": 0.0001,
+  "lip": 5.0,
+  "iter": 20,
+  "maxfun": 60,
+  "stride": 1.0,
+  "start": 1.05,
+
+  "prox_mode": 2,
+  "pressure": "nhp_3_nsp", 
+  "recon_opt": 2,
+  "ind": 3,
+  "skullp0": 0,
+  "onlycor": false,
+
+  "noise": 5,
+  "noise_scale": 0.00026,
+
+  "paths": {
+    "nhp_directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250319_headphantom/data/",
+    "directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250727_JRwithAubry/",
+    "saving_root": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/case_study"
+  },
+
+  "runtime": {
+    "debug_small": true,
+    "debug_only_one_fista": false,
+    "debug_nt": 4800,
+    "trace_full": true,
+    "heartbeat_sec": 60,
+    "log_gpu": true
+  },
+
+  "physics": {
+    "cb": 1.5,
+    "f0": 1.0,
+    "ppw": 4,
+    "fs": 30,
+    "space_order": 10,
+    "to": 2,
+    "nbl": 16
+  },
+
+  "devito_log_level": "INFO",
+  "save_freq": 1,
+  "out_print": 3,
+  "use_check": false
+}
