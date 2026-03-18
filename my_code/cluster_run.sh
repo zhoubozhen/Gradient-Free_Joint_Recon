@@ -3,15 +3,15 @@ set -euo pipefail
 
 ENV_NAME="${ENV_NAME:-devito}"
 
-NEW_V2_ROOT="${NEW_V2_ROOT:-$HOME/Project/fix_versions/new_v2}"
-REPO_ROOT="${REPO_ROOT:-$HOME/Project/fix_versions}"
-PYTHON_MOD="${PYTHON_MOD:-new_v2.my_code.main}"
+NEW_V2_ROOT="${NEW_V2_ROOT:-/home/bozhen2/my_packages/fista_tranPACT}"
+REPO_ROOT="${REPO_ROOT:-/home/bozhen2/my_packages}"
+PYTHON_MOD="${PYTHON_MOD:-fista_tranPACT.my_code.main}"
 CONFIG_PATH="${CONFIG_PATH:-$NEW_V2_ROOT/my_code/cluster_config.json}"
 WORKDIR="${WORKDIR:-$PWD}"
 LOG_ROOT="${LOG_ROOT:-$WORKDIR/logs}"
 
 mkdir -p "${LOG_ROOT}"
-TS="$(date +"%Y%m%d_%H%M%S")"
+TS="$(date +"%Y%m%d_%H%M")"
 LOG_FILE="${LOG_ROOT}/${TS}.log"
 touch "${LOG_FILE}"
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -81,5 +81,15 @@ echo
 
 echo "LOG_FILE=${LOG_FILE}"
 echo "CONFIG=${CONFIG_PATH}"
+
+echo ""
+echo "================ CONFIG BEGIN ================"
+if [[ -f "${CONFIG_PATH}" ]]; then
+  cat "${CONFIG_PATH}"
+else
+  echo "[WARN] CONFIG file not found: ${CONFIG_PATH}"
+fi
+echo "================= CONFIG END ================="
+echo ""
 
 "${TASKSET_PREFIX[@]}" python3 -u -m "${PYTHON_MOD}" --config "${CONFIG_PATH}"

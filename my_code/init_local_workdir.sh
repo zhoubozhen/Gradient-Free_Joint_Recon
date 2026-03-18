@@ -45,6 +45,7 @@ copy_if_missing "${TEMPLATE_DIR}/run_prox_worker.py"   "${TARGET_DIR}/my_code/ru
 copy_if_missing "${TEMPLATE_DIR}/run_local.sh"          "${TARGET_DIR}/my_code/run_local.sh"
 
 chmod +x "${TARGET_DIR}/my_code/cluster_run.sh"
+chmod +x "${TARGET_DIR}/my_code/run_local.sh"
 
 TARGET_DIR_ENV="${TARGET_DIR}" PACKAGE_ROOT_ENV="${PACKAGE_ROOT}" python3 - <<'PY'
 from pathlib import Path

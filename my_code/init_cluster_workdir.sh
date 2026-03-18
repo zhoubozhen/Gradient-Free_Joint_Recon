@@ -8,8 +8,8 @@ else
   TARGET_DIR="$CUR_DIR"
 fi
 
-PACKAGE_ROOT="/home/bozhen2/Project/fix_versions/new_v2"
-REPO_ROOT="/home/bozhen2/Project/fix_versions"
+PACKAGE_ROOT="/home/bozhen2/my_packages/fista_tranPACT"
+REPO_ROOT="/home/bozhen2/my_packages"
 TEMPLATE_DIR="${PACKAGE_ROOT}/my_code"
 
 echo "Initializing CLUSTER workdir at:"
@@ -68,7 +68,7 @@ for i, line in enumerate(lines):
             f'NEW_V2_ROOT={package_root};'
             f'REPO_ROOT={repo_root};'
             f'CONFIG_PATH={target_dir}/my_code/cluster_config.json;'
-            f'PYTHON_MOD=new_v2.my_code.main;'
+            f'PYTHON_MOD=fista_tranPACT.my_code.main;'
             f'WORKDIR={target_dir}"'
         )
 
