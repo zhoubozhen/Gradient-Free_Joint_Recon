@@ -1,0 +1,59 @@
+{
+  "binding": {},
+  "maxfun": 60,
+  "stride": 1.0,
+  "start": 1.05,
+  "pressure": "nhp_3_nsp",
+  "recon_opt": 0,
+  "ind": 3,
+  "skullp0": 0,
+  "onlycor": false,
+  "noise": 5,
+  "noise_scale": 0.00026,
+  "paths": {
+    "nhp_directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250319_headphantom/data/",
+    "directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250727_JRwithAubry/",
+    "saving_root": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/case_study"
+  },
+  "runtime": {
+    "debug_small": true,
+    "debug_only_one_fista": false,
+    "debug_nt": 4800,
+    "trace_full": true,
+    "heartbeat_sec": 60,
+    "log_gpu": true
+  },
+  "physics": {
+    "cb": 1.5,
+    "f0": 1.0,
+    "ppw": 4,
+    "fs": 30,
+    "space_order": 10,
+    "to": 2,
+    "nbl": 16
+  },
+  "devito_log_level": "INFO",
+  "out_print": 3,
+  "fista": {
+    "reg": 0.0001,
+    "lip": 5.0,
+    "iter": 20,
+    "prox_mode": 2,
+    "prox_impl": "mix",
+    "prox_iter": 50,
+    "grad_min": 1e-05,
+    "cost_min": 0.001,
+    "save_freq": 1,
+    "use_check": false,
+    "check_iter": 10,
+    "rel_thr": 0.001,
+    "rel_patience": 2,
+    "rel_warmup": 2,
+    "div_rel_thr": 0.01,
+    "div_patience": 2,
+    "div_warmup": 2,
+    "runtime": {
+      "worker_script": "${NEW_V2_ROOT}/my_code/run_prox_worker.py"
+    }
+  }
+}
