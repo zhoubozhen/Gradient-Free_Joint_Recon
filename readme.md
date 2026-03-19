@@ -78,7 +78,7 @@
 | `pressure`  | string | 压力数据标签/数据类型      | `"nhp_3_nsp"` | 由数据加载逻辑解释                                   |
 | `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",常改；1可能有bug |
 | `ind`       | int    | 样本索引 / case 索引       | `3`           | 常用于选择具体数据                                   |
-| `skullp0`   | int    | 是否启用 skull p0 相关流程 | `0`           | 0:不使用skull, 1:skull区域p0置零                     |
+| `skullp0`   | int    | 是否启用 skull p0 相关流程 | `0`           | 0:skull区域p0置零, 1: 不使用skull_roi                    |
 
 说明：
 
