@@ -106,7 +106,7 @@ def patch_json_config(path: Path):
         if isinstance(obj, dict):
             for k, v in obj.items():
                 if k == "worker_script":
-                    obj[k] = "my_code/run_prox_worker.py"
+                    obj[k] = f"{package_root}/my_code/run_prox_worker.py"
                     changed += 1
                 else:
                     changed += walk(v)

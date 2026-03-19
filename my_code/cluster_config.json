@@ -12,7 +12,7 @@
     "save_freq": 1,
     "use_check": true,
     "check_iter": 1,
-    "rel_thr": 0.001,
+    "rel_thr": 0.01,
     "rel_patience": 2,
     "rel_warmup": 2,
     "div_rel_thr": 0.01,

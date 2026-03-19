@@ -78,6 +78,8 @@ def run_fista(
 
     runtime_cfg = dict(cfg.get("runtime", {}) or {})
     worker_script = runtime_cfg.get("worker_script", None)
+    runtime_prox_cuda_visible_devices = runtime_cfg.get("prox_cuda_visible_devices", None)
+    runtime_prox_nvidia_visible_devices = runtime_cfg.get("prox_nvidia_visible_devices", None)
 
     binding_cfg = dict(cfg.get("binding", {}) or {})
     prox_gpu_idx = binding_cfg.get("prox_gpu_idx", None)
@@ -86,7 +88,13 @@ def run_fista(
     prox_cuda_visible_devices = os.environ.get("PROX_CUDA_VISIBLE_DEVICES", "").strip() or None
     prox_nvidia_visible_devices = os.environ.get("PROX_NVIDIA_VISIBLE_DEVICES", "").strip() or None
 
-    # local: 回退到 config
+    # runtime: 次优先读上游传下来的 prox 绑定
+    if prox_cuda_visible_devices is None and prox_nvidia_visible_devices is None:
+        if runtime_prox_cuda_visible_devices is not None or runtime_prox_nvidia_visible_devices is not None:
+            prox_cuda_visible_devices = runtime_prox_cuda_visible_devices
+            prox_nvidia_visible_devices = runtime_prox_nvidia_visible_devices
+
+    # binding: 最后回退到 binding.prox_gpu_idx
     if prox_cuda_visible_devices is None and prox_nvidia_visible_devices is None:
         if prox_gpu_idx is not None and str(prox_gpu_idx).strip() != "":
             prox_cuda_visible_devices = str(prox_gpu_idx)

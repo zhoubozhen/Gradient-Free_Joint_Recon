@@ -353,6 +353,8 @@ class GFJRSolver:
                 "div_warmup": div_warmup,
                 "runtime": {
                     "worker_script": getattr(self.opt_para, "worker_script", None),
+                    "prox_cuda_visible_devices": getattr(self.opt_para, "prox_cuda_visible_devices", None),
+                    "prox_nvidia_visible_devices": getattr(self.opt_para, "prox_nvidia_visible_devices", None),
                 },
             }
             self.p0_est, _, _ = run_fista(

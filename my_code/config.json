@@ -15,14 +15,14 @@
     "save_freq": 1,
     "use_check": true,
     "check_iter": 1,
-    "rel_thr": 0.001,
+    "rel_thr": 0.01,
     "rel_patience": 2,
     "rel_warmup": 2,
     "div_rel_thr": 0.01,
     "div_patience": 2,
     "div_warmup": 2,
     "runtime": {
-      "worker_script": "${NEW_V2_ROOT}/my_code/run_prox_worker.py"
+      "worker_script": "/home/bozhen2/my_packages/fista_tranPACT/my_code/run_prox_worker.py"
     }
   },
   "maxfun": 60,
