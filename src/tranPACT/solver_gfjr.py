@@ -98,6 +98,8 @@ class ReducedCostFunction:
             "div_warmup": div_warmup,
             "runtime": {
                 "worker_script": getattr(self.opt_para, "worker_script", None),
+                "prox_cuda_visible_devices": getattr(self.opt_para, "prox_cuda_visible_devices", None),
+                "prox_nvidia_visible_devices": getattr(self.opt_para, "prox_nvidia_visible_devices", None),
             },
         }
         self.inner_solver = lambda init_guess: run_fista(
@@ -299,13 +301,13 @@ class GFJRSolver:
         Returns:
             The estimated speed of sound (c) as a NumPy array.
         """
-        # if not os.path.exists(self.saving_dir+'OBRM_result.DAT'):
+        # if not os.path.exists(os.path.join(self.saving_dir, 'OBRM_result.DAT')):
         #     self.cost_function.medium_set(c0, use_static=True)
         #     self.initial_guess(num_iter_init)
         self.cost_function.medium_set(c0, use_static=True, use_downsample=self.use_downsample)
         self.initial_guess(num_iter_init)
         (Nx, Ny, Nz) = self.solver.model.shape
-        self.cost_function.p0_est_global = np.fromfile(self.saving_dir+'OBRM_result.DAT', dtype=np.float32).reshape(Nx,Ny,Nz)
+        self.cost_function.p0_est_global = np.fromfile(os.path.join(self.saving_dir, 'OBRM_result.DAT'), dtype=np.float32).reshape(Nx,Ny,Nz)
         if maxfun is None:
             maxfun = 60   # 保持你现在的默认行为
 
@@ -315,7 +317,7 @@ class GFJRSolver:
 
     def initial_guess(self, num_iter=None):
         num_iter_init = num_iter or self.opt_para.num_iter
-        OBRM_path = self.saving_dir + 'OBRM/'
+        OBRM_path = os.path.join(self.saving_dir, 'OBRM') + '/'
         if not os.path.exists(OBRM_path) and self.rank==0:
             os.system('mkdir '+OBRM_path)
         (Nx, Ny, Nz) = self.solver.model.shape
@@ -367,6 +369,6 @@ class GFJRSolver:
                 mpi_rank=self.rank,
                 out_print=self.opt_para.out_print,
             )
-            self.p0_est.astype(np.float32).tofile(self.saving_dir+f'OBRM_result.DAT')
+            self.p0_est.astype(np.float32).tofile(os.path.join(self.saving_dir, 'OBRM_result.DAT'))
         except OSError as err:
             print(err)

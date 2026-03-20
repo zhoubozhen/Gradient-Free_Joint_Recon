@@ -210,9 +210,32 @@ def main():
 
     # paths（来自 config）
     paths = cfg.get("paths", {})
-    nhp_directory = paths["nhp_directory"]
-    directory = paths["directory"]
     saving_root = paths["saving_root"]
+
+    rec_pos_path = paths["rec_pos_path"]
+
+    pressure_data_path = paths["pressure_data_path"]
+    pressure_data_key = paths.get("pressure_data_key", "forward")
+
+    noise_data_path = paths["noise_data_path"]
+    noise_data_key = paths.get("noise_data_key", "forward")
+
+    fn_path_recon0 = paths["fn_path_recon0"]
+    fn_path_recon1 = paths["fn_path_recon1"]
+    fn_path_recon2 = paths["fn_path_recon2"]
+
+    opt_roi_path = paths["opt_roi_path"]
+    cor_roi_path = paths["cor_roi_path"]
+    skull_roi_path = paths["skull_roi_path"]
+
+    medium_mat_path_recon0 = paths["medium_mat_path_recon0"]
+    medium_mat_key_recon0 = paths.get("medium_mat_key_recon0", "annhp")
+
+    medium_mat_path_recon1 = paths["medium_mat_path_recon1"]
+    medium_mat_key_recon1 = paths.get("medium_mat_key_recon1", "annhp")
+
+    ctdata_mat_path = paths["ctdata_mat_path"]
+    ctdata_mat_key = paths.get("ctdata_mat_key", "ct_data")
 
     # logger
     logger = Logger(rank=rank, size=size, log_gpu=LOG_GPU, heartbeat_sec=HEARTBEAT_SEC)
@@ -227,7 +250,7 @@ def main():
     # -------------------------
     DTYPE = np.float32
     with StageTimer("load rec_pos"):
-        rec_pos = np.fromfile(os.path.join(nhp_directory, "mp_raw.DAT"), dtype=DTYPE).reshape(3, -1).T
+        rec_pos = np.fromfile(rec_pos_path, dtype=DTYPE).reshape(3, -1).T
         rec_pos -= np.min(rec_pos, axis=0) - 1.5
     Nrec = rec_pos.shape[0]
     log(f"rec_pos loaded: Nrec={Nrec}")
@@ -236,8 +259,8 @@ def main():
     # 8) load pressure
     # -------------------------
     with StageTimer("load forward pressure"):
-        with h5py.File(os.path.join(directory, f"vit_data/{pressure}.hdf5"), "r") as f:
-            p0_forward = f["forward"][:].astype(np.float32)
+        with h5py.File(pressure_data_path, "r") as f:
+            p0_forward = f[pressure_data_key][:].astype(np.float32)
 
     if p0_forward.ndim == 1:
         Nt_full = p0_forward.size // Nrec
@@ -258,11 +281,11 @@ def main():
     # -------------------------
     with StageTimer("load fn"):
         if recon_opt == 2:
-            fn = np.fromfile(os.path.join(directory, "param/fn_water_bone.DAT"), dtype=DTYPE).reshape(-1, 4)
+            fn = np.fromfile(fn_path_recon2, dtype=DTYPE).reshape(-1, 4)
         elif recon_opt == 1:
-            fn = np.fromfile(os.path.join(directory, "param/fn_1p3l_nhp_3.DAT"), dtype=DTYPE).reshape(-1, 4)
+            fn = np.fromfile(fn_path_recon1, dtype=DTYPE).reshape(-1, 4)
         else:
-            fn = np.fromfile(os.path.join(directory, "param/fn_1p1l_nhp_3.DAT"), dtype=DTYPE).reshape(-1, 4)
+            fn = np.fromfile(fn_path_recon0, dtype=DTYPE).reshape(-1, 4)
     log(f"fn shape={fn.shape}")
 
     # -------------------------
@@ -281,9 +304,9 @@ def main():
     nbl = int(cfg.get("physics", {}).get("nbl", 16))
 
     with StageTimer("load opt_roi"):
-        opt_roi = np.fromfile(os.path.join(nhp_directory, "param/roi_intran.DAT"), dtype=DTYPE).reshape(702, 702, 350)
-        cor_roi = np.load(os.path.join(nhp_directory, "param/roi_cor.npy"))
-        skull_roi = np.load(os.path.join(nhp_directory, "param/roi_diluted_skull.npy"))
+        opt_roi = np.fromfile(opt_roi_path, dtype=DTYPE).reshape(702, 702, 350)
+        cor_roi = np.load(cor_roi_path)
+        skull_roi = np.load(skull_roi_path)
 
     if skullp0 == 0:
         opt_roi[skull_roi == 1] = 0
@@ -311,7 +334,7 @@ def main():
     # -------------------------
     with StageTimer("build model"):
         if recon_opt == 0:
-            medium_geo_index = sio.loadmat(os.path.join(nhp_directory, "acoustic/nhp_1p1l_vifov.mat"))["annhp"]
+            medium_geo_index = sio.loadmat(medium_mat_path_recon0)[medium_mat_key_recon0]
             if DEBUG_SMALL:
                 medium_geo_index = apply_downsample_3d(medium_geo_index, ix, iy, iz)
             model = TranPACTModel(
@@ -322,7 +345,7 @@ def main():
                 spacing=(dx, dy, dz), nbl=nbl, dtype=DTYPE
             )
         elif recon_opt == 1:
-            medium_geo_index = sio.loadmat(os.path.join(nhp_directory, "acoustic/nhp_1p3l_vifov.mat"))["annhp"]
+            medium_geo_index = sio.loadmat(medium_mat_path_recon1)[medium_mat_key_recon1]
             if DEBUG_SMALL:
                 medium_geo_index = apply_downsample_3d(medium_geo_index, ix, iy, iz)
             model = TranPACTModel(
@@ -333,8 +356,8 @@ def main():
                 spacing=(dx, dy, dz), nbl=nbl, dtype=DTYPE
             )
         else:
-            mdic = sio.loadmat(os.path.join(directory, "param/nhp_ctdata_vifov.mat"))
-            ct_data = mdic["ct_data"]
+            mdic = sio.loadmat(ctdata_mat_path)
+            ct_data = mdic[ctdata_mat_key]
             use_static = True
             use_downsample = (stride != 1.0)
             model = TranPACTModel(
@@ -353,8 +376,8 @@ def main():
     # 12) noise
     # -------------------------
     with StageTimer("load noise"):
-        with h5py.File(os.path.join(nhp_directory, "param/noise_filtered_unit_std.hdf5"), "r") as f:
-            p0_noise = f["forward"][:].astype(np.float32)
+        with h5py.File(noise_data_path, "r") as f:
+            p0_noise = f[noise_data_key][:].astype(np.float32)
 
     if p0_noise.ndim == 1:
         Nt_noise_full = p0_noise.size // Nrec
