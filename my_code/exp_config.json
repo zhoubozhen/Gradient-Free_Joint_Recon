@@ -25,6 +25,7 @@
       "worker_script": "/home/bozhen2/my_packages/fista_tranPACT/my_code/run_prox_worker.py"
     }
   },
+  "initial_guess_iter": 0,
   "maxfun": 60,
   "start": 1.05,
   "out_print": 3,
@@ -32,7 +33,7 @@
     "saving_root": "/shared/anastasio-s3/CommonData/bozhen/experiment/260320try_2510data/saved_data/"
   },
   "exp": {
-    "prefix": "phB_bottom_wtskull",
+    "prefix": "phB_top_noskull",
     "folder": "/shared/rsaas/hkhuang3/Exp_251023_for_Mark_group/",
     "model_mode": 2,
     "ct_path": "/shared/rsaas/hkhuang3/Exp_251023_for_Mark_group/info/registered_ct.h5",

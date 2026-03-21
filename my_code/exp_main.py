@@ -154,17 +154,30 @@ def main():
 
     start = float(cfg.get("start", 1.0))
     maxfun = int(cfg.get("maxfun", 60))
+    initial_guess_iter = int(cfg.get("initial_guess_iter", 60))
 
     if skull_type == "aubry":
-        c0 = np.array([4.0, 2.0], dtype=np.float32) * start
+        c0 = np.array([4.0, 2.0], dtype=np.float32) 
     else:
-        c0 = np.array([2.898, 1.4], dtype=np.float32) * start
+        c0 = np.array([2.898, 1.4], dtype=np.float32)
 
     lower = 0.85 * c0
     upper = 1.15 * c0
 
-    print("==== START GFJR ====", flush=True)
-    gfjrsolver.solve(c0, lower, upper, num_iter_init=opt_param.num_iter * 2, maxfun=maxfun, use_static=False)
+    if initial_guess_iter > 0:
+        print(f"==== START INITIAL_GUESS ({initial_guess_iter}) ====", flush=True)
+        gfjrsolver.initial_guess(initial_guess_iter)
+    else:
+        print("==== START GFJR ====", flush=True)
+        gfjrsolver.solve(
+            c0,
+            lower,
+            upper,
+            num_iter_init=opt_param.num_iter * 2,
+            maxfun=maxfun,
+            use_static=False
+        )
+
     print("==== DONE ====", flush=True)
 
 
