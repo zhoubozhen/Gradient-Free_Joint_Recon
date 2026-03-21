@@ -190,7 +190,7 @@ class ReducedCostFunction:
             if use_static:
                 self.solver.model.initialize_medium(fn_tmp, use_static=True, use_downsample=use_downsample)
             else:
-                self.solver.model.initialize_medium(fn_tmp,use_downsample=use_downsample)
+                self.solver.model.initialize_medium(fn_tmp, use_static=False, use_downsample=use_downsample)
         else:
             raise ValueError(f"Unknown medium mode: {self.medium_mode}. Supported modes are 'mpml' and 'aubry'.")
 
@@ -294,7 +294,7 @@ class GFJRSolver:
         self.cost_function = ReducedCostFunction(p0_est=self.p0_est, measured_pressure=self.data, fn=self.fn, opt_param=self.opt_para, wave_solver=self.solver, forward=self.forward, adjoint=self.adjoint, rank=self.rank, use_downsample=self.use_downsample,**param)
         
 
-    def solve(self, c0, lower, upper, num_iter_init=None, maxfun=None):
+    def solve(self, c0, lower, upper, num_iter_init=None, maxfun=None, use_static=True):
         """
         Runs the optimization using pybobyqa to estimate the speed of sound (c).
 
@@ -304,7 +304,7 @@ class GFJRSolver:
         # if not os.path.exists(os.path.join(self.saving_dir, 'OBRM_result.DAT')):
         #     self.cost_function.medium_set(c0, use_static=True)
         #     self.initial_guess(num_iter_init)
-        self.cost_function.medium_set(c0, use_static=True, use_downsample=self.use_downsample)
+        self.cost_function.medium_set(c0, use_static=use_static, use_downsample=self.use_downsample)
         self.initial_guess(num_iter_init)
         (Nx, Ny, Nz) = self.solver.model.shape
         self.cost_function.p0_est_global = np.fromfile(os.path.join(self.saving_dir, 'OBRM_result.DAT'), dtype=np.float32).reshape(Nx,Ny,Nz)

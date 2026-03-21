@@ -5,8 +5,8 @@ ENV_NAME="${ENV_NAME:-devito}"
 
 NEW_V2_ROOT="${NEW_V2_ROOT:-/home/bozhen2/my_packages/fista_tranPACT}"
 REPO_ROOT="${REPO_ROOT:-/home/bozhen2/my_packages}"
-PYTHON_MOD="${PYTHON_MOD:-fista_tranPACT.my_code.main}"
-CONFIG_PATH="${CONFIG_PATH:-$NEW_V2_ROOT/my_code/cluster_config.json}"
+PYTHON_MOD="${PYTHON_MOD:-fista_tranPACT.my_code.exp_main}"
+CONFIG_PATH="${CONFIG_PATH:-$NEW_V2_ROOT/my_code/exp_cluster_config.json}"
 WORKDIR="${WORKDIR:-$PWD}"
 LOG_ROOT="${LOG_ROOT:-$WORKDIR/logs}"
 
@@ -25,8 +25,9 @@ conda activate "${ENV_NAME}"
 
 export CC=nvc
 export CXX=nvc++
-export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
+export PYTHONPATH="${REPO_ROOT}:${NEW_V2_ROOT}/src:${PYTHONPATH:-}"
 export CUDA_DEVICE_ORDER="PCI_BUS_ID"
+export PYTHONUNBUFFERED=1
 
 ASSIGNED_UUIDS="${NVIDIA_VISIBLE_DEVICES:-${_CONDOR_AssignedGPUs:-}}"
 if [[ -z "${ASSIGNED_UUIDS}" ]]; then
