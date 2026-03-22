@@ -51,7 +51,7 @@ sub_path = target_dir / "my_code" / "cluster.sub"
 cfg_path = target_dir / "my_code" / "cluster_config.json"
 run_path = target_dir / "my_code" / "cluster_run.sh"
 
-# patch cluster.sub
+# 1) patch cluster.sub
 text = sub_path.read_text()
 lines = text.splitlines()
 
@@ -68,14 +68,13 @@ for i, line in enumerate(lines):
             f'NEW_V2_ROOT={package_root};'
             f'REPO_ROOT={repo_root};'
             f'CONFIG_PATH={target_dir}/my_code/cluster_config.json;'
-            f'PYTHON_MOD=fista_tranPACT.my_code.main;'
             f'WORKDIR={target_dir}"'
         )
 
 sub_path.write_text("\n".join(lines) + "\n")
 print("Patched cluster.sub")
 
-# patch cluster_config.json -> worker_script points to package file
+# 2) patch cluster_config.json -> worker_script points to package file
 data = json.loads(cfg_path.read_text())
 
 def patch_worker_script(obj):
@@ -96,8 +95,9 @@ n = patch_worker_script(data)
 cfg_path.write_text(json.dumps(data, indent=2) + "\n")
 print(f"Patched cluster_config.json worker_script occurrences: {n}")
 
-# patch cluster_run.sh with absolute paths
+# 3) patch cluster_run.sh with absolute paths + direct workdir main.py execution
 run_text = run_path.read_text()
+
 run_text = run_text.replace(
     'CONFIG_PATH="${CONFIG_PATH:-$NEW_V2_ROOT/my_code/cluster_config.json}"',
     f'CONFIG_PATH="${{CONFIG_PATH:-{target_dir}/my_code/cluster_config.json}}"'
@@ -110,6 +110,28 @@ run_text = run_text.replace(
     'LOG_ROOT="${LOG_ROOT:-$WORKDIR/logs}"',
     f'LOG_ROOT="${{LOG_ROOT:-{target_dir}/logs}}"'
 )
+
+run_text = run_text.replace(
+    'export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"',
+    'export PYTHONPATH="${REPO_ROOT}:${NEW_V2_ROOT}/src:${PYTHONPATH:-}"'
+)
+
+run_text = run_text.replace(
+    'PYTHON_MOD="${PYTHON_MOD:-fista_tranPACT.my_code.main}"\n',
+    ''
+)
+run_text = run_text.replace(
+    'echo "PYTHON_MOD  : ${PYTHON_MOD}"\n',
+    ''
+)
+
+old_cmd = '"${TASKSET_PREFIX[@]}" python3 -u -m "${PYTHON_MOD}" --config "${CONFIG_PATH}"'
+new_cmd = 'cd "${WORKDIR}"\n"${TASKSET_PREFIX[@]}" python3 -u "${WORKDIR}/my_code/main.py" --config "${CONFIG_PATH}"'
+if old_cmd in run_text:
+    run_text = run_text.replace(old_cmd, new_cmd)
+else:
+    print("[WARN] Did not find old python -m command in cluster_run.sh; please check manually")
+
 run_path.write_text(run_text)
 print("Patched cluster_run.sh")
 PY

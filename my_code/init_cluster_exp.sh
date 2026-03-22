@@ -68,7 +68,6 @@ for i, line in enumerate(lines):
             f'NEW_V2_ROOT={package_root};'
             f'REPO_ROOT={repo_root};'
             f'CONFIG_PATH={target_dir}/my_code/exp_cluster_config.json;'
-            f'PYTHON_MOD=fista_tranPACT.my_code.exp_main;'
             f'WORKDIR={target_dir}"'
         )
 
@@ -98,6 +97,7 @@ print(f"Patched exp_cluster_config.json worker_script occurrences: {n}")
 
 # 3) patch cluster_run_exp.sh -> absolute defaults
 run_text = run_path.read_text()
+
 run_text = run_text.replace(
     'CONFIG_PATH="${CONFIG_PATH:-$NEW_V2_ROOT/my_code/exp_cluster_config.json}"',
     f'CONFIG_PATH="${{CONFIG_PATH:-{target_dir}/my_code/exp_cluster_config.json}}"'
@@ -110,6 +110,14 @@ run_text = run_text.replace(
     'LOG_ROOT="${LOG_ROOT:-$WORKDIR/logs}"',
     f'LOG_ROOT="${{LOG_ROOT:-{target_dir}/logs}}"'
 )
+
+old_cmd = '"${TASKSET_PREFIX[@]}" python3 -u -m "${PYTHON_MOD}" --config "${CONFIG_PATH}"'
+new_cmd = 'cd "${WORKDIR}"\n"${TASKSET_PREFIX[@]}" python3 -u "${WORKDIR}/my_code/exp_main.py" --config "${CONFIG_PATH}"'
+if old_cmd in run_text:
+    run_text = run_text.replace(old_cmd, new_cmd)
+else:
+    print("[WARN] Did not find old python -m command in cluster_run_exp.sh; please check manually")
+
 run_path.write_text(run_text)
 print("Patched cluster_run_exp.sh")
 PY
