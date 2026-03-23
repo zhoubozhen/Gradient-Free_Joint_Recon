@@ -18,7 +18,7 @@ class ReducedCostFunction:
     Note that the medium_set function should be updated for the specific problem.
     """
     def __init__(self, p0_est, measured_pressure, fn, opt_param, wave_solver, 
-                 forward, adjoint, use_downsample = False, **param):
+                 forward, adjoint, use_static=True, use_downsample = False, **param):
         """
         Initializes the ReducedCostFunction.
 
@@ -54,6 +54,7 @@ class ReducedCostFunction:
                 - use_check: Flag to use existing data from a previous run (default: False).
         """
         ## General parameters
+        self.use_static = use_static
         self.p0_est = p0_est
         self.p0_est_global = self.p0_est.copy()
         self.measured_pressure = measured_pressure
@@ -221,7 +222,7 @@ class ReducedCostFunction:
             return cost
 
         ## Step 2: Solve the inner loop.
-        self.medium_set(sos_local, use_static=True, use_downsample=self.use_downsample)
+        self.medium_set(sos_local, use_static=self.use_static, use_downsample=self.use_downsample)
         self.p0_est, _, fistaiter = self.inner_solver(self.p0_est_global)
 
         ## Step 3: Compute the cost function.
@@ -256,7 +257,8 @@ class GFJRSolver:
     """
     Joint Reconstruction Wave Solver using pybobyqa.
     """
-    def __init__(self, solver, measured_pressure, fn, forward=None, adjoint=None, opt_param=None, init_guess=None, use_downsample=False,**param):
+    def __init__(self, solver, measured_pressure, fn, forward=None, adjoint=None, opt_param=None, init_guess=None, use_static=True, use_downsample=False,**param):
+        self.use_static = use_static
         self.use_downsample = use_downsample
         self.solver = solver
         self.data = measured_pressure.copy()
@@ -291,7 +293,7 @@ class GFJRSolver:
         if self.rank == 0:
             if not os.path.exists(self.saving_dir):
                 os.system('mkdir '+self.saving_dir)
-        self.cost_function = ReducedCostFunction(p0_est=self.p0_est, measured_pressure=self.data, fn=self.fn, opt_param=self.opt_para, wave_solver=self.solver, forward=self.forward, adjoint=self.adjoint, rank=self.rank, use_downsample=self.use_downsample,**param)
+        self.cost_function = ReducedCostFunction(p0_est=self.p0_est, measured_pressure=self.data, fn=self.fn, opt_param=self.opt_para, wave_solver=self.solver, forward=self.forward, adjoint=self.adjoint, rank=self.rank, use_static=self.use_static, use_downsample=self.use_downsample,**param)
         
 
     def solve(self, c0, lower, upper, num_iter_init=None, maxfun=None, use_static=True):
