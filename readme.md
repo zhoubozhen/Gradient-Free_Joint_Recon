@@ -76,7 +76,7 @@
 | `stride`    | float  | 空间下采样步长             | `1.0`         | `1.0` 表示不下采样；增大降计算量比如5.0              |
 | `start`     | float  | 初始参数或初始模型缩放因子 | `1.05`        | 用于外层初始化，常改                                 |
 | `pressure`  | string | 压力数据标签/数据类型      | `"nhp_3_nsp"` | 由数据加载逻辑解释                                   |
-| `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",常改；1可能有bug |
+| `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",必须搭配stride=1,常改；1可能有bug |
 | `ind`       | int    | 样本索引 / case 索引       | `3`           | 常用于选择具体数据                                   |
 | `skullp0`   | int    | 是否启用 skull p0 相关流程 | `0`           | 0:skull区域p0置零, 1: 不使用skull_roi                    |
 
