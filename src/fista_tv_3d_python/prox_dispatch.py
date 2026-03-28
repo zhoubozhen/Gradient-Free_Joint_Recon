@@ -65,8 +65,8 @@ def call_prox_subprocess(
     prox_impl = _normalize_prox_impl(prox_impl)
 
     os.makedirs(saving_dir, exist_ok=True)
-    in_npy = os.path.join(saving_dir, f"__prox_in_rank{mpi_rank}_iter{iter_idx}.npy")
-    out_npy = os.path.join(saving_dir, f"__prox_out_rank{mpi_rank}_iter{iter_idx}.npy")
+    in_npy = os.path.join(saving_dir, f"__prox_in_rank{mpi_rank}_pid{os.getpid()}_iter{iter_idx}.npy")
+    out_npy = os.path.join(saving_dir, f"__prox_out_rank{mpi_rank}_pid{os.getpid()}_iter{iter_idx}.npy")
 
     np.save(in_npy, np.asarray(p0_in, dtype=np.float32, order="C"))
 

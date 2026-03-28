@@ -4,6 +4,12 @@ from devito import (VectorTimeFunction, TensorTimeFunction, Function, Eq,
 
 __all__ = ['ForwardOperator','AdjointOperator','JRForwardOperator','JRAdjointOperator','JRAdjointcheckOperator']
 
+
+def _devito_opt(model):
+    nprocs = getattr(getattr(model.grid, 'distributor', None), 'nprocs', 1)
+    use_openmp = (nprocs == 1)
+    return ('advanced', {'openmp': use_openmp})
+
 def ForwardOperator(model, p0, rec, space_order=10, time_order=2, **kwargs):
     x, y, z = model.grid.dimensions
     t = model.grid.stepping_dim
@@ -54,7 +60,7 @@ def ForwardOperator(model, p0, rec, space_order=10, time_order=2, **kwargs):
     u_tzy = Eq(tau.forward[2, 1], (tau[2, 1]*(1-s*model.s_z) + s* (model.mu_yz * (grad(v.forward)+grad(v.forward).transpose(inner=False)))[2, 1]))
 
     return Operator([u_vx, u_vy, u_vz] + [u_txx, u_txy, u_txz, u_tyx, u_tyy, u_tyz, u_tzx, u_tzy, u_tzz] + rec_term,
-                    compiler='nvc', platform='nvidiaX', language='openacc', opt=('advanced', {'openmp' : True}), **kwargs)
+                    compiler='nvc', platform='nvidiaX', language='openacc', opt=_devito_opt(model), **kwargs)
 
 def AdjointOperator(model, rec, src, space_order=10, time_order=2, **kwargs):
     x, y, z = model.grid.dimensions
@@ -100,7 +106,7 @@ def AdjointOperator(model, rec, src, space_order=10, time_order=2, **kwargs):
                                     s*(model.mu_yz * (grad(v.backward)+grad(v.backward).transpose(inner=False)))[2, 1]))
 
     return Operator([u_vx, u_vy, u_vz]+[u_txx, u_txy, u_txz, u_tyx, u_tyy, u_tyz, u_tzx, u_tzy, u_tzz]+src_xx+src_yy+src_zz,
-                    compiler='nvc', platform='nvidiaX', language='openacc', opt=('advanced', {'openmp' : True}), **kwargs)
+                    compiler='nvc', platform='nvidiaX', language='openacc', opt=_devito_opt(model), **kwargs)
 
 def JRForwardOperator(model, rec, space_order=10, time_order=2, **kwargs):
     x, y, z = model.grid.dimensions
@@ -141,7 +147,7 @@ def JRForwardOperator(model, rec, space_order=10, time_order=2, **kwargs):
     u_tzy = Eq(tau.forward[2, 1], (tau[2, 1]*(1-s*model.s_z) + s* (model.mu_yz * (grad(v.forward)+grad(v.forward).transpose(inner=False)))[2, 1]))
 
     return Operator([u_vx, u_vy, u_vz]+[u_txx, u_txy, u_txz, u_tyx, u_tyy, u_tyz, u_tzx, u_tzy, u_tzz]+rec_term+[Eq(vsave, v)],
-                    compiler='nvc', platform='nvidiaX', language='openacc', opt=('advanced', {'openmp' : True}))
+                    compiler='nvc', platform='nvidiaX', language='openacc', opt=_devito_opt(model))
 
 def JRAdjointOperator(model, rec, src, space_order=10, time_order=2, **kwargs):
     x, y, z = model.grid.dimensions
@@ -204,7 +210,7 @@ def JRAdjointOperator(model, rec, src, space_order=10, time_order=2, **kwargs):
     return Operator([u_vx, u_vy, u_vz]
                     +[u_txx, u_txy, u_txz, u_tyx, u_tyy, u_tyz, u_tzx, u_tzy,u_tzz]
                     +src_xx+src_yy+src_zz+[grad_ksum]+[grad_msum],
-                    compiler='nvc',platform='nvidiaX', language='openacc', opt=('advanced', {'openmp' : True}))
+                    compiler='nvc',platform='nvidiaX', language='openacc', opt=_devito_opt(model))
 
 def JRAdjointcheckOperator(model, rec, src, space_order=10, time_order=2, checkpoint=False, **kwargs):
     x, y, z = model.grid.dimensions
@@ -271,4 +277,4 @@ def JRAdjointcheckOperator(model, rec, src, space_order=10, time_order=2, checkp
     return Operator([u_vx, u_vy, u_vz]
                     +[u_txx, u_txy, u_txz, u_tyx, u_tyy, u_tyz, u_tzx, u_tzy,u_tzz]
                     +src_xx+src_yy+src_zz+[grad_ksum]+[grad_msum],
-                    compiler='nvc',platform='nvidiaX', language='openacc', opt=('advanced', {'openmp' : True}))
+                    compiler='nvc',platform='nvidiaX', language='openacc', opt=_devito_opt(model))

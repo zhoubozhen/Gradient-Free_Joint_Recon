@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 import scipy.io as sio
 import h5py
+from scipy.ndimage import zoom
 
 # -------------------------
 # config helpers
@@ -34,14 +35,19 @@ def _set_env_before_cupy(cfg: dict):
     os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
-    # MPI: local rank -> CUDA_VISIBLE_DEVICES=local_rank（只用“可见卡”的局部编号）
+    # MPI: keep CUDA_VISIBLE_DEVICES from wrapper/config; do NOT overwrite with local_rank
     if cfg.get("mpi", False):
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+        os.environ.setdefault("MKL_NUM_THREADS", "1")
+        os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
         local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", "0"))
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(local_rank)
+        _ = local_rank
         return comm, rank, size
 
     # non-MPI:
@@ -51,6 +57,12 @@ def _set_env_before_cupy(cfg: dict):
     if os.environ.get("CUDA_VISIBLE_DEVICES", "").strip() == "":
         binding_cfg = dict(cfg.get("binding", {}) or {})
         main_gpu_idx = binding_cfg.get("main_gpu_idx", None)
+
+        if main_gpu_idx is None:
+            main_gpu_idxs = binding_cfg.get("main_gpu_idxs", None)
+            if isinstance(main_gpu_idxs, list) and len(main_gpu_idxs) > 0:
+                main_gpu_idx = main_gpu_idxs[0]
+
         if main_gpu_idx is not None and str(main_gpu_idx) != "":
             os.environ["CUDA_VISIBLE_DEVICES"] = str(main_gpu_idx)
             os.environ.setdefault("NVIDIA_VISIBLE_DEVICES", str(main_gpu_idx))
@@ -77,6 +89,26 @@ def _print_cupy_device():
     free, total = cp.cuda.runtime.memGetInfo()
     print(f"[MAIN] cupy device name     = {name}", flush=True)
     print(f"[MAIN] cupy mem free/total  = {free/1e9:.2f}/{total/1e9:.2f} GB", flush=True)
+
+def _resample_3d_scale(arr, scale: float, order: int):
+    if abs(scale - 1.0) < 1e-12:
+        return arr
+    if arr.ndim != 3:
+        raise ValueError(f"Expected 3D array, got ndim={arr.ndim}")
+    out = zoom(arr, zoom=(scale, scale, scale), order=order)
+    return out
+
+def _resample_mask(arr, scale: float):
+    if abs(scale - 1.0) < 1e-12:
+        return arr
+    out = _resample_3d_scale(arr, scale, order=0)
+    return out.astype(arr.dtype, copy=False)
+
+def _resample_field(arr, scale: float):
+    if abs(scale - 1.0) < 1e-12:
+        return arr
+    out = _resample_3d_scale(arr, scale, order=1)
+    return out.astype(np.float32, copy=False)
 
 # -------------------------
 # entry
@@ -121,7 +153,7 @@ def main():
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-    # 工具（你已有 gfjr_utils.py）
+    # 工具
     from gfjr_utils import (
         print_main_env_snapshot,
         try_print_nvidia_smi,
@@ -198,7 +230,7 @@ def main():
     binding_cfg = dict(cfg.get("binding", {}) or {})
     prox_gpu_idx = binding_cfg.get("prox_gpu_idx", None)
 
-    # cluster: 优先读 .sh / Condor 导出的环境变量
+    # cluster: 优先读外部导出的环境变量
     prox_cuda_visible_devices = os.environ.get("PROX_CUDA_VISIBLE_DEVICES", "").strip() or None
     prox_nvidia_visible_devices = os.environ.get("PROX_NVIDIA_VISIBLE_DEVICES", "").strip() or None
 
@@ -293,7 +325,11 @@ def main():
     # -------------------------
     cb = float(cfg.get("physics", {}).get("cb", 1.5))
     f0 = float(cfg.get("physics", {}).get("f0", 1.0))
-    ppw = int(cfg.get("physics", {}).get("ppw", 4))
+    ppw = float(cfg.get("physics", {}).get("ppw", 4.0))
+
+    # 固定基准：按 config 传进来的 ppw / 4.0 作为上采样倍数
+    ppw_scale = ppw / 4.0
+
     ll = cb / f0
     dx0 = dy0 = dz0 = ll / ppw
 
@@ -307,6 +343,11 @@ def main():
         opt_roi = np.fromfile(opt_roi_path, dtype=DTYPE).reshape(702, 702, 350)
         cor_roi = np.load(cor_roi_path)
         skull_roi = np.load(skull_roi_path)
+
+        if abs(ppw_scale - 1.0) > 1e-12:
+            opt_roi = _resample_mask(opt_roi, ppw_scale)
+            cor_roi = _resample_mask(cor_roi, ppw_scale)
+            skull_roi = _resample_mask(skull_roi, ppw_scale)
 
     if skullp0 == 0:
         opt_roi[skull_roi == 1] = 0
@@ -327,7 +368,12 @@ def main():
     opt_roi = np.ascontiguousarray(opt_roi.astype(np.float32))
     Nx, Ny, Nz = opt_roi.shape
     shape = (Nx, Ny, Nz)
-    log(f"ROI shape={shape}, nnz={int(np.count_nonzero(opt_roi))}, spacing=({dx:.6f},{dy:.6f},{dz:.6f}), bytes={opt_roi.nbytes/1e9:.3f}GB")
+    log(
+        f"ROI shape={shape}, nnz={int(np.count_nonzero(opt_roi))}, "
+        f"spacing=({dx:.6f},{dy:.6f},{dz:.6f}), "
+        f"ppw={ppw:.3f}, ppw_scale={ppw_scale:.3f}, "
+        f"bytes={opt_roi.nbytes/1e9:.3f}GB"
+    )
 
     # -------------------------
     # 11) model + solver
@@ -335,8 +381,11 @@ def main():
     with StageTimer("build model"):
         if recon_opt == 0:
             medium_geo_index = sio.loadmat(medium_mat_path_recon0)[medium_mat_key_recon0]
+            if abs(ppw_scale - 1.0) > 1e-12:
+                medium_geo_index = _resample_field(medium_geo_index, ppw_scale)
             if DEBUG_SMALL:
                 medium_geo_index = apply_downsample_3d(medium_geo_index, ix, iy, iz)
+            medium_geo_index = np.ascontiguousarray(medium_geo_index.astype(np.float32, copy=False))
             model = TranPACTModel(
                 space_order=so, medium_geometry=medium_geo_index,
                 medium_param=fn, water_index=0,
@@ -346,8 +395,11 @@ def main():
             )
         elif recon_opt == 1:
             medium_geo_index = sio.loadmat(medium_mat_path_recon1)[medium_mat_key_recon1]
+            if abs(ppw_scale - 1.0) > 1e-12:
+                medium_geo_index = _resample_field(medium_geo_index, ppw_scale)
             if DEBUG_SMALL:
                 medium_geo_index = apply_downsample_3d(medium_geo_index, ix, iy, iz)
+            medium_geo_index = np.ascontiguousarray(medium_geo_index.astype(np.float32, copy=False))
             model = TranPACTModel(
                 space_order=so, medium_geometry=medium_geo_index,
                 medium_param=fn, water_index=0,
@@ -358,6 +410,11 @@ def main():
         else:
             mdic = sio.loadmat(ctdata_mat_path)
             ct_data = mdic[ctdata_mat_key]
+            if abs(ppw_scale - 1.0) > 1e-12:
+                ct_data = _resample_field(ct_data, ppw_scale)
+            if DEBUG_SMALL:
+                ct_data = apply_downsample_3d(ct_data, ix, iy, iz)
+            ct_data = np.ascontiguousarray(ct_data.astype(np.float32, copy=False))
             use_static = True
             use_downsample = (stride != 1.0)
             model = TranPACTModel(
@@ -407,14 +464,51 @@ def main():
     # 14) forward/adjoint wrapper
     # -------------------------
     def forward_wrapped(p0):
+        import numpy as np
+
         with StageTimer("DEVITO forward()"):
             out = solver.forward(p0)
+
+        if cfg.get("mpi", False):
+            nt = solver.rec.data.shape[0]
+            local_arr = np.asarray(out, dtype=np.float32).reshape(nt, -1)
+            gathered = comm.allgather(local_arr)
+            out = np.concatenate(gathered, axis=1).ravel()
+            log(f"forward_wrapped MPI gather: local={local_arr.shape} global={(nt, out.size // nt)}")
+
         log(f"forward out: shape={getattr(out,'shape',None)} dtype={getattr(out,'dtype',None)}")
         return out
 
     def adjoint_wrapped(p):
+        import numpy as np
+
+        arr = np.asarray(p, dtype=np.float32)
+        nt = solver.src.data.shape[0]
+        local_nrec = solver.src.data.shape[1]
+
+        if arr.ndim == 1:
+            global_nrec = arr.size // nt
+            arr2 = arr.reshape(nt, global_nrec)
+        else:
+            arr2 = arr
+
+        if cfg.get("mpi", False):
+            start = rank * local_nrec
+            end = start + local_nrec
+            arr_local = np.ascontiguousarray(arr2[:, start:end], dtype=np.float32)
+            log(f"adjoint_wrapped MPI slice: global={arr2.shape} local={arr_local.shape} start={start} end={end}")
+        else:
+            arr_local = np.ascontiguousarray(arr2, dtype=np.float32)
+
         with StageTimer("DEVITO adjoint()"):
-            out = solver.adjoint(p)
+            out = solver.adjoint(arr_local.ravel())
+
+        if cfg.get("mpi", False):
+            local_out = np.asarray(out, dtype=np.float32)
+            gathered = comm.allgather(local_out)
+            out = np.concatenate(gathered, axis=0)
+            log(f"adjoint_wrapped MPI gather: local={local_out.shape} global={out.shape}")
+
         log(f"adjoint out: shape={getattr(out,'shape',None)} dtype={getattr(out,'dtype',None)}")
         return out
 
@@ -456,6 +550,7 @@ def main():
         adjoint=adjoint_wrapped,
         opt_param=opt_param,
         comm=comm,
+        rank=rank,
         Nt=Nt,
         use_downsample=use_downsample,
     )
@@ -481,7 +576,7 @@ def main():
 
     log("START GFJR.solve()")
     with StageTimer("GFJR.solve"):
-        gfjrsolver.solve(c0, lower, upper, num_iter_init=num_iter * 2, maxfun=maxfun)
+        gfjrsolver.solve(c0, lower, upper, num_iter_init=0, maxfun=maxfun)
 
     logger.stop_heartbeat()
     log("ALL DONE")

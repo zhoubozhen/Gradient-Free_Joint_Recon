@@ -236,17 +236,37 @@ class TranPACTModel(GenericModel):
 
         t0 = time.time()
         if verbose:
+            dist = getattr(self.grid, "distributor", None)
             print(
                 f"[INIT_MEDIUM] ENTER initialize_medium | "
                 f"cor_length={cor_length}",
                 flush=True
             )
+            print(
+#                 f"[INIT_MEDIUM DBG] grid.shape={self.grid.shape} model.shape={self.shape} "
+                f"nprocs={getattr(dist, 'nprocs', 'NA')} "
+                f"myrank={getattr(dist, 'myrank', 'NA')}",
+                flush=True
+            )
+            print(
+#                 f"[INIT_MEDIUM DBG] alp_x.data.shape={self.alp_x.data.shape} "
+                f"b_x.data.shape={self.b_x.data.shape}",
+                flush=True
+            )
+            # print(
+            #     f"[INIT_MEDIUM DBG] distributor attrs: "
+            #     f"glb_pos_map={getattr(dist, 'glb_pos_map', 'NA')} "
+            #     f"glb_numb={getattr(dist, 'glb_numb', 'NA')} "
+            #     f"shape={getattr(dist, 'shape', 'NA')} "
+            #     f"dimensions={getattr(dist, 'dimensions', 'NA')}",
+            #     flush=True
+            # )
         # ------------------------------------------------------------
         # 1. Aubry / staggered convolution (最慢的部分)
         # ------------------------------------------------------------
         t1 = time.time()
         if verbose:
-            print("[INIT_MEDIUM] ENTER staggered_prop (Aubry)", flush=True)
+            print("[INIT_MEDIUM] ENTER staggered_prop", flush=True)
 
         if use_static:
             if verbose:
@@ -341,7 +361,9 @@ class TranPACTModel(GenericModel):
         print("med_rho_x shape =", med_rho_x.shape)
 
         t3 = time.time()
+#         print(f"[INIT_MEDIUM DBG] BEFORE init alp_x: func={self.alp_x.data.shape} input={med_alpha_x.shape}", flush=True)
         initialize_function(self.alp_x, med_alpha_x, nbl)
+#         print(f"[INIT_MEDIUM DBG] AFTER  init alp_x: func={self.alp_x.data.shape}", flush=True)
         initialize_function(self.alp_y, med_alpha_y, nbl)
         initialize_function(self.alp_z, med_alpha_z, nbl)
         initialize_function(self.b_x, 1.0 / med_rho_x, nbl)

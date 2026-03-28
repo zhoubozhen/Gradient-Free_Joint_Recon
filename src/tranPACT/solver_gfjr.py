@@ -119,17 +119,22 @@ class ReducedCostFunction:
         self.medium_mode = wave_solver.model.medium_mode
 
         ## MPI parameters
+        self.comm = param.get("comm", None)
         self.rank = param.get("rank", 0)
         ## Load parameters
         use_check = opt_param.use_check
         self.cur_iter = 0
-        if use_check and os.path.exists(self.saving_dir+'datafid_record.DAT'):
+        use_check_runtime = bool(use_check and (self.comm is None))
+        if use_check_runtime and os.path.exists(self.saving_dir+'datafid_record.DAT'):
             print("load existing GFJR data...")
             self.obj_record = np.fromfile(self.saving_dir+"datafid_record.DAT", dtype=np.float32).tolist()
             self.iter_record = np.fromfile(self.saving_dir+"iter_record.DAT", dtype=np.float32).tolist()
             self.c0_record = np.fromfile(self.saving_dir+"c0_record.DAT", dtype=np.float32).reshape(len(self.obj_record), -1).tolist()
         else:
-            print("start GFJR from scratch...")
+            if self.comm is not None and self.rank == 0 and use_check:
+                print("[GFJR] MPI mode: disable loading existing GFJR cache, start from scratch...", flush=True)
+            else:
+                print("start GFJR from scratch...")
             self.c0_record = []
             self.obj_record = []
             self.iter_record = []
@@ -235,22 +240,18 @@ class ReducedCostFunction:
         ## Step 4: Save the computed cost function and the current sos_local.
         self.c0_record.append(sos_local.tolist())
         self.obj_record.append(cost)
-        if cost==np.min(self.obj_record):
+        if cost == np.min(self.obj_record):
             self.p0_est_global = self.p0_est.copy()
         self.iter_record.append(fistaiter)
         iter_ind = len(self.obj_record)
-        if self.rank==0:
+        if self.rank == 0:
             try:
-                print(sos_local, '{:.4f}'.format(cost), fistaiter)
-                self.p0_est.astype(np.float32).tofile(self.saving_dir+f'gfjr_{iter_ind}.DAT')
-                np.array(self.obj_record, dtype=np.float32).tofile(self.saving_dir+'datafid_record.DAT')
-                np.array(self.c0_record, dtype=np.float32).tofile(self.saving_dir+'c0_record.DAT')
-                np.array(self.iter_record, dtype=np.float32).tofile(self.saving_dir+'iter_record.DAT')
-            except OSError as err:
+                self.p0_est.astype(np.float32).tofile(self.saving_dir + f'gfjr_{iter_ind}.DAT')
+                np.array(self.obj_record, dtype=np.float32).tofile(self.saving_dir + 'datafid_record.DAT')
+                np.array(self.c0_record, dtype=np.float32).tofile(self.saving_dir + 'c0_record.DAT')
+                np.array(self.iter_record, dtype=np.float32).tofile(self.saving_dir + 'iter_record.DAT')
+            except Exception as err:
                 print(err)
-            except Exception as e:
-                print(e)
-        self.cur_iter += 1
         return cost
 
 class GFJRSolver:
@@ -288,12 +289,12 @@ class GFJRSolver:
             (Nx, Ny, Nz) = solver.model.shape
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
-            self.forward = lambda p0: solver.mpi_forward(p0, comm=self.comm, Nt=Nt)
-            self.adjoint = lambda p0_forward: solver.mpi_adjoint(p0_forward.copy(), comm=self.comm, Nx=Nx, Ny=Ny, Nz=Nz, fullscale=False)
+            param.pop("rank", None)
+            print("[GFJR] MPI mode: keep provided forward/adjoint, do NOT use solver.mpi_forward/mpi_adjoint", flush=True)
         if self.rank == 0:
             if not os.path.exists(self.saving_dir):
                 os.system('mkdir '+self.saving_dir)
-        self.cost_function = ReducedCostFunction(p0_est=self.p0_est, measured_pressure=self.data, fn=self.fn, opt_param=self.opt_para, wave_solver=self.solver, forward=self.forward, adjoint=self.adjoint, rank=self.rank, use_static=self.use_static, use_downsample=self.use_downsample,**param)
+        self.cost_function = ReducedCostFunction(p0_est=self.p0_est, measured_pressure=self.data, fn=self.fn, opt_param=self.opt_para, wave_solver=self.solver, forward=self.forward, adjoint=self.adjoint, rank=self.rank, use_static=self.use_static, use_downsample=self.use_downsample,**{k:v for k,v in param.items() if k!='rank'})
         
 
     def solve(self, c0, lower, upper, num_iter_init=None, maxfun=None, use_static=True):
@@ -308,17 +309,56 @@ class GFJRSolver:
         #     self.initial_guess(num_iter_init)
         self.cost_function.medium_set(c0, use_static=use_static, use_downsample=self.use_downsample)
         self.initial_guess(num_iter_init)
-        (Nx, Ny, Nz) = self.solver.model.shape
-        self.cost_function.p0_est_global = np.fromfile(os.path.join(self.saving_dir, 'OBRM_result.DAT'), dtype=np.float32).reshape(Nx,Ny,Nz)
+        if self.comm is not None:
+            self.comm.Barrier()
+        self.cost_function.p0_est_global = self.p0_est.copy()
         if maxfun is None:
             maxfun = 60   # 保持你现在的默认行为
 
-        soln = pybobyqa.solve(self.cost_function, c0, rhobeg=0.2, rhoend=0.01, maxfun=maxfun, scaling_within_bounds=True, bounds=(lower,upper))
-        if self.rank==0:
-            print(soln)
+        if self.comm is None:
+            soln = pybobyqa.solve(
+                self.cost_function, c0,
+                rhobeg=0.2, rhoend=0.01, maxfun=maxfun,
+                scaling_within_bounds=True, bounds=(lower, upper)
+            )
+            if self.rank == 0:
+                print(soln)
+        else:
+            if self.rank == 0:
+                soln = pybobyqa.solve(
+                    self._mpi_eval_cost_root, c0,
+                    rhobeg=0.2, rhoend=0.01, maxfun=maxfun,
+                    scaling_within_bounds=True, bounds=(lower, upper)
+                )
+                self.comm.bcast(0, root=0)
+                print(soln)
+            else:
+                soln = None
+                self._mpi_eval_worker()
+
+    def _mpi_eval_cost_root(self, sos_local):
+        flag = 1
+        self.comm.bcast(flag, root=0)
+        sos_local = np.asarray(sos_local, dtype=np.float64)
+        sos_local = self.comm.bcast(sos_local, root=0)
+        return self.cost_function(sos_local)
+
+    def _mpi_eval_worker(self):
+        while True:
+            flag = self.comm.bcast(None, root=0)
+            if flag == 0:
+                break
+            sos_local = self.comm.bcast(None, root=0)
+            self.cost_function(sos_local)
 
     def initial_guess(self, num_iter=None):
-        num_iter_init = num_iter or self.opt_para.num_iter
+        num_iter_init = self.opt_para.num_iter if num_iter is None else num_iter
+        if num_iter_init <= 0:
+            if self.rank == 0:
+                print("[GFJR] skip initial_guess because num_iter_init <= 0", flush=True)
+            if self.comm is not None:
+                self.comm.Barrier()
+            return
         OBRM_path = os.path.join(self.saving_dir, 'OBRM') + '/'
         if not os.path.exists(OBRM_path) and self.rank==0:
             os.system('mkdir '+OBRM_path)
@@ -366,11 +406,14 @@ class GFJRSolver:
                 Nx, Ny, Nz,
                 self.forward, self.adjoint, self.solver.model.opt_roi,
                 fista_cfg=fista_cfg,
-                saving_dir=OBRM_path,
+                saving_dir=self.saving_dir,
                 init_guess=self.p0_est,
                 mpi_rank=self.rank,
                 out_print=self.opt_para.out_print,
             )
-            self.p0_est.astype(np.float32).tofile(os.path.join(self.saving_dir, 'OBRM_result.DAT'))
+            if self.comm is not None:
+                self.comm.Barrier()
+            if self.rank == 0:
+                self.p0_est.astype(np.float32).tofile(os.path.join(self.saving_dir, 'OBRM_result.DAT'))
         except OSError as err:
             print(err)

@@ -52,18 +52,82 @@ class TranPACTWaveSolver(object):
         self.model = model
         self.space_order = self.model.space_order
         self.time_range = time_range or TimeAxis(start=0, num=Nt, step=dt)
+
+        dist = getattr(model.grid, "distributor", None)
+        rec_pos_arr = np.asarray(rec_pos, dtype=model.dtype)
+
+        local_rec_pos = np.ascontiguousarray(rec_pos_arr, dtype=model.dtype)
+        if dist is not None and getattr(dist, "nprocs", 1) > 1:
+            myrank = getattr(dist, "myrank", 0)
+            # print(f"[SPARSE BUILD] rank={myrank} use full rec_pos once, shape={local_rec_pos.shape}", flush=True)
+            # print(f"[SPARSE BUILD] rank={myrank} local_rec_pos.first={local_rec_pos[:3]}", flush=True)
+            # print(f"[SPARSE BUILD] rank={myrank} local_rec_pos.min={local_rec_pos.min(axis=0)} max={local_rec_pos.max(axis=0)}", flush=True)
+
         if rec is None:
-            self.rec = Receiver(name="rec", grid=model.grid, npoint=rec_pos.shape[0],
-                                time_range=self.time_range, dtype=model.dtype)
-            self.rec.coordinates.data[:,:] = rec_pos
+            self.rec = Receiver(
+                name="rec",
+                grid=model.grid,
+                npoint=local_rec_pos.shape[0],
+                time_range=self.time_range,
+                coordinates=local_rec_pos,
+                dtype=model.dtype
+            )
         else:
             self.rec = rec
         if src is None:
-            self.src = PointSource(name='src', grid=model.grid, npoint=rec_pos.shape[0],
-                                   time_range=self.time_range, dtype=model.dtype)
-            self.src.coordinates.data[:,:] = rec_pos
+            self.src = PointSource(
+                name='src',
+                grid=model.grid,
+                npoint=local_rec_pos.shape[0],
+                time_range=self.time_range,
+                coordinates=local_rec_pos,
+                dtype=model.dtype
+            )
         else:
             self.src = src
+
+        dist = getattr(model.grid, "distributor", None)
+        # print(
+        #     f"[SPARSE DBG] rank={getattr(dist, 'myrank', 'NA')} "
+        #     f"rec.data.shape={self.rec.data.shape} "
+        #     f"src.data.shape={self.src.data.shape} "
+        #     f"rec.coords.shape={self.rec.coordinates.data.shape} "
+        #     f"src.coords.shape={self.src.coordinates.data.shape}",
+        #     flush=True
+        # )
+        try:
+            # print(
+            #     f"[SPARSE DBG] rank={getattr(dist, 'myrank', 'NA')} "
+            #     f"rec.coords.first={self.rec.coordinates.data[:3]} "
+            #     f"src.coords.first={self.src.coordinates.data[:3]}",
+            #     flush=True
+            # )
+            # print(
+            #     f"[SPARSE DBG] rank={getattr(dist, 'myrank', 'NA')} "
+            #     f"rec.coords._data.shape={self.rec.coordinates._data.shape} "
+            #     f"src.coords._data.shape={self.src.coordinates._data.shape}",
+            #     flush=True
+            # )
+            # print(
+            #     f"[SPARSE DBG] rank={getattr(dist, 'myrank', 'NA')} "
+            #     f"rec.coords._data.first={self.rec.coordinates._data[:3]} "
+            #     f"src.coords._data.first={self.src.coordinates._data[:3]}",
+            #     flush=True
+            # )
+            # print(
+            #     f"[SPARSE DBG] rank={getattr(dist, 'myrank', 'NA')} "
+            #     f"rec.coords._data.min={self.rec.coordinates._data.min(axis=0)} "
+            #     f"rec.coords._data.max={self.rec.coordinates._data.max(axis=0)}",
+            #     flush=True
+            # )
+            rank_tag = getattr(dist, 'myrank', 0)
+            np.save(f"/tmp/rec_coords_rank{rank_tag}.npy", self.rec.coordinates._data.copy())
+            np.save(f"/tmp/src_coords_rank{rank_tag}.npy", self.src.coordinates._data.copy())
+            # print(f"[SPARSE DBG] dumped /tmp/rec_coords_rank{rank_tag}.npy", flush=True)
+        except Exception as e:
+            pass
+            # print(f"[SPARSE DBG] coords print failed: {e}", flush=True)
+
         self.p0_roi = (np.zeros(model.shape, dtype=np.float32))[self.model.opt_roi>0]
         self.time_order = time_order
         # Cache compiler options
@@ -114,11 +178,15 @@ class TranPACTWaveSolver(object):
         (Nx,Ny,Nz) = model.shape
         
         # Setting new time function as initialization
+        import time
+        t_obj0 = time.time()
+        # print(f"[ADJ TIME] BEFORE create v/tau rank={getattr(model.grid.distributor, 'myrank', 'NA')}", flush=True)
         v = VectorTimeFunction(name='v', grid=model.grid, space_order=self.space_order,
                            time_order=self.time_order, dtype=DTYPE, staggered=[(-x, -t), (y, -t), (z, -t)])
         tau = TensorTimeFunction(name='sigma', grid=model.grid, space_order=self.space_order, 
                              time_order=self.time_order, dtype=DTYPE,
                              staggered=[[(), (-x,y), (-x,z)], [(-x,y), (), (y,z)], [(-x,z), (y,z), ()]])
+        # print(f"[ADJ TIME] AFTER  create v/tau rank={getattr(model.grid.distributor, 'myrank', 'NA')} dt={time.time()-t_obj0:.3f}s", flush=True)
         
         # Setting initial pressure
         if math.prod(p0_flat.shape)==math.prod(model.shape):
@@ -126,12 +194,17 @@ class TranPACTWaveSolver(object):
         else:
             p0 = np.zeros(model.shape,dtype=np.float32)
             p0[opt_roi>0] = p0_flat.ravel()
+
+        # print(f"[FORWARD DBG] p0.shape={p0.shape} tau00.data.shape={tau[0,0].data.shape} target_slice=({Nx},{Ny},{Nz})", flush=True)
         tau[0,0].data[0,nbl:nbl+Nx,nbl:nbl+Ny,nbl:nbl+Nz] = -p0
         tau[1,1].data[0,nbl:nbl+Nx,nbl:nbl+Ny,nbl:nbl+Nz] = -p0
         tau[2,2].data[0,nbl:nbl+Nx,nbl:nbl+Ny,nbl:nbl+Nz] = -p0
         
         # Execute operator and return wavefield and receiver data 
         # can use print(op_fwd.parameters) to check valid apply input
+        if __import__("os").environ.get("DUMMY_MPI_FORWARD", "0") == "1":
+            # print("[FORWARD DBG] DUMMY_MPI_FORWARD=1 -> skip op_fwd.apply and return zeros", flush=True)
+            return np.zeros(rec.data.shape, dtype=np.float32).ravel()
         op_fwd = self.op_fwd() # acquiring cached operator
         op_fwd.apply(dt=dt, v_x=v[0], v_y=v[1], v_z=v[2], sigma_xx=tau[0,0],
                      sigma_xy=tau[0,1], sigma_xz=tau[0,2], sigma_yy=tau[1,1],
@@ -146,7 +219,7 @@ class TranPACTWaveSolver(object):
         else:
             return rec.data.ravel().copy()
 
-    def adjoint(self, rec_data_flat, src=None, v=None, model=None, fullscale=False, **kwargs):
+    def adjoint(self, rec_data_flat, src=None, v=None, model=None, fullscale=False, rec_start=None, rec_end=None, **kwargs):
         """
         Adjoint modelling function that creates the necessary
         data objects for running an adjoint modelling operator.
@@ -187,20 +260,43 @@ class TranPACTWaveSolver(object):
                              staggered=[[(), (-x,y), (-x,z)], [(-x,y), (), (y,z)], [(-x,z), (y,z), ()]])
         
         # Setting received data as adjoint source
-        rec_data = rec_data_flat.reshape(self.rec.data.shape[0],-1)
-        measured_pressure = np.zeros(rec_data.shape, dtype=np.float32)
-        measured_pressure += rec_data
-        src.data[:,:] = measured_pressure
+        rec_data = np.asarray(rec_data_flat).reshape(self.rec.data.shape[0], -1)
+        measured_pressure = np.asarray(rec_data, dtype=np.float32, order='C')
+        measured_pressure = np.ascontiguousarray(measured_pressure)
+
+        # print(f"[ADJOINT DBG] rec_data_flat shape={np.shape(rec_data_flat)} dtype={getattr(rec_data_flat, 'dtype', type(rec_data_flat))}", flush=True)
+        # print(f"[ADJOINT DBG] rec_data shape={rec_data.shape} dtype={rec_data.dtype} C={rec_data.flags['C_CONTIGUOUS']}", flush=True)
+        # print(f"[ADJOINT DBG] measured_pressure shape={measured_pressure.shape} dtype={measured_pressure.dtype} C={measured_pressure.flags['C_CONTIGUOUS']}", flush=True)
+        # print(f"[ADJOINT DBG] src.data shape={src.data.shape} dtype={src.data.dtype} C={src.data.flags['C_CONTIGUOUS']}", flush=True)
+
+        assert measured_pressure.shape == src.data.shape, f"shape mismatch: measured_pressure {measured_pressure.shape} vs src.data {src.data.shape}"
+
+        # print(f"[ADJOINT DBG] write raw local buffer src._data with shape={src._data.shape}", flush=True)
+        src._data[:, :] = measured_pressure
         # print(rec_data_flat.shape)
         # print(self.rec.data.shape)
         
         # Execute operator and return wavefield
         # can use print(op_fwd.parameters) to check valid apply input
+        if __import__("os").environ.get("DUMMY_MPI_ADJOINT", "0") == "1":
+            # print("[ADJOINT DBG] DUMMY_MPI_ADJOINT=1 -> skip op_adj.apply and return zeros", flush=True)
+            return np.zeros((Nx, Ny, Nz), dtype=np.float32)
+        import time
+        t_build0 = time.time()
+        # print(f"[ADJ TIME] BEFORE build op_adj rank={getattr(model.grid.distributor, 'myrank', 'NA')}", flush=True)
         op_adj = self.op_adj()
+        # print(f"[ADJ TIME] AFTER  build op_adj rank={getattr(model.grid.distributor, 'myrank', 'NA')} dt={time.time()-t_build0:.3f}s", flush=True)
+        import cupy as cp
+        cp.cuda.Device().synchronize()
+        t_apply0 = time.time()
+        # print(f"[ADJ TIME] BEFORE op_adj.apply rank={getattr(model.grid.distributor, 'myrank', 'NA')}", flush=True)
         op_adj.apply(dt=dt, v_x=v[0], v_y=v[1], v_z=v[2], sigma_xx=tau[0,0],
                      sigma_xy=tau[0,1], sigma_xz=tau[0,2], sigma_yy=tau[1,1],
                      sigma_yz=tau[1,2], sigma_zz=tau[2,2],
                      time_m=0, time_M=self.time_range.num-1, **kwargs)
+        cp.cuda.Device().synchronize()
+        # print(f"[ADJ TIME] AFTER  op_adj.apply rank={getattr(model.grid.distributor, 'myrank', 'NA')} dt={time.time()-t_apply0:.3f}s wall={time.time():.6f}", flush=True)
+        # print(f"[ADJOINT DBG] tau00.data.shape={tau[0,0].data.shape} fullscale={fullscale} target_slice=({Nx},{Ny},{Nz})", flush=True)
         if fullscale:
             p0 = -(tau[0,0].data[2,:,:,:]+tau[1,1].data[2,:,:,:]
                 +tau[2,2].data[2,:,:,:])/3
@@ -239,27 +335,28 @@ class TranPACTWaveSolver(object):
             return array
 
     def mpi_forward(self, p0_flat, comm, Nt):
-        rank = comm.Get_rank()
-        size = comm.Get_size()
-        if size>1:
-            p0_forward_T = self.forward(p0_flat).reshape(Nt, -1).T.ravel()
-            newData = comm.gather(p0_forward_T,root=0)
-            if rank==0:
-                p0_forward_T = np.array(newData,dtype=np.float32).ravel()
-            else:
-                p0_forward_T = np.zeros(p0_forward_T.shape[0]*size,dtype=np.float32)
-            del newData
-            comm.Bcast(p0_forward_T, root=0)
-            p0_forward = p0_forward_T.reshape(-1, Nt).T
-            return p0_forward.ravel()
-        else:
-            return self.forward(p0_flat).ravel()
+        return self.forward(p0_flat).ravel()
         
-    def mpi_adjoint(self, p0_ravel, comm, Nx, Ny, Nz, fullscale=True):
-        p0_adj = self.adjoint(p0_ravel, fullscale=True)
-        nbl = self.model.nbl
-        p0_combined = self.devito_mpi_collect(p0_adj, comm, Nx+2*nbl, Ny+2*nbl, Nz+2*nbl)
-        if fullscale:
-            return p0_combined
+    def mpi_adjoint(self, p0_ravel, comm, Nx, Ny, Nz, fullscale=False):
+        import numpy as np
+
+        rank = comm.Get_rank()
+        local_nrec = self.src.data.shape[1]
+        arr = np.asarray(p0_ravel, dtype=np.float32)
+
+        if arr.ndim == 1:
+            nt = self.src.data.shape[0]
+            global_nrec = arr.size // nt
+            arr2 = arr.reshape(nt, global_nrec)
         else:
-            return p0_combined[nbl:-nbl, nbl:-nbl, nbl:-nbl]
+            arr2 = arr
+
+        if arr2.shape[1] == local_nrec:
+            local_arr = np.ascontiguousarray(arr2, dtype=np.float32)
+        else:
+            start = rank * local_nrec
+            end = start + local_nrec
+            local_arr = np.ascontiguousarray(arr2[:, start:end], dtype=np.float32)
+
+        print(f"[MPI_ADJOINT DBG] rank={rank} input shape={arr2.shape} local_nrec={local_nrec} local_arr={local_arr.shape}", flush=True)
+        return self.adjoint(local_arr.ravel(), fullscale=False, rec_start=start, rec_end=end)
