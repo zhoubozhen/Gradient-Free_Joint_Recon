@@ -9,43 +9,11 @@ def run_fista(
     saving_dir='',
     init_guess=None,
     mpi_rank=0,
+    comm=None,
     out_print=3
 ):
     """
     Config-friendly wrapper around fista_tv().
-
-    Parameters
-    ----------
-    pmeas : array-like
-        Measured pressure.
-    Nx, Ny, Nz : int
-        Volume shape.
-    forward_op, adjoint_op : callable
-        Forward/adjoint operators.
-    roi : ndarray
-        ROI mask, must match local shape used by adjoint_op.
-    fista_cfg : dict
-        Config dict for FISTA, e.g.
-        {
-            "reg": 1e-4,
-            "lip": 5.0,
-            "iter": 20,
-            "prox_mode": 2,
-            "prox_impl": "mix",
-            "prox_iter": 50,
-            "grad_min": 1e-5,
-            "grad_min_init": 1e-4,
-            "cost_min": 1e-3,
-            "save_freq": 1,
-            "use_check": False,
-            "check_iter": 10,
-            "rel_thr": 1e-3,
-            "rel_patience": 2,
-            "rel_warmup": 2,
-            "div_rel_thr": 1e-2,
-            "div_patience": 2,
-            "div_warmup": 2
-        }
     """
     cfg = dict(fista_cfg or {})
 
@@ -118,6 +86,7 @@ def run_fista(
         out_print=out_print,
         init_guess=init_guess,
         mpi_rank=mpi_rank,
+        comm=comm,
         use_check=use_check,
         check_iter=check_iter,
         save_freq=save_freq,

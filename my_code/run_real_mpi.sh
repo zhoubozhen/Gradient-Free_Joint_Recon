@@ -10,20 +10,23 @@ mkdir -p "${LOG_DIR}"
 DATE_TAG="$(date +%Y%m%d_%H%M%S)"
 LOG_FILE="${LOG_DIR}/${DATE_TAG}.log"
 
+module purge
+module load nvidia-hpc-sdk-multi/25.1-rh8
+
 source /home/bozhen2/anaconda3/etc/profile.d/conda.sh
 conda activate devito
 
-module unload openmpi/rhel/5.0.7 2>/dev/null || true
-module purge
-module load nvidia-hpc-sdk-multi/25.1-rh8
-module load cuda-toolkit/12.2
-module load openmpi/rhel/5.0.8-cuda-aware
+unset PYTHONHOME
+
+export OMPI_ROOT="/software/nvidia-rh8-hpc-sdk-multi-25.1/Linux_x86_64/25.1/comm_libs/openmpi4"
+export OPAL_PREFIX="${OMPI_ROOT}"
+export PATH="${OMPI_ROOT}/bin:${PATH:-}"
+export LD_LIBRARY_PATH="/software/gcc-5.3.0/lib64:${LD_LIBRARY_PATH:-}"
+
 hash -r
 
 export OMPI_CC=nvc
 export OMPI_CXX=nvc++
-export MPICC=nvc
-export MPICXX=nvc++
 
 export CUDA_DEVICE_ORDER=PCI_BUS_ID
 export PYTHONPATH="${WORKDIR}/src:${WORKDIR}:${PYTHONPATH:-}"
@@ -97,6 +100,16 @@ export PROX_NVIDIA_VISIBLE_DEVICES="${PROX_GPU_IDX}"
   echo "PROX_CUDA_VISIBLE_DEVICES=${PROX_CUDA_VISIBLE_DEVICES}"
   echo "PROX_NVIDIA_VISIBLE_DEVICES=${PROX_NVIDIA_VISIBLE_DEVICES}"
   echo "PYTHONPATH=${PYTHONPATH}"
+  echo "PATH=${PATH}"
+  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+  echo "OPAL_PREFIX=${OPAL_PREFIX:-}"
+  echo "which python3 = $(which python3)"
+  echo "which mpirun  = $(which mpirun)"
+  echo "which mpicc   = $(which mpicc)"
+  echo "mpirun --version ="
+  mpirun --version | head -n 5
+  echo "mpicc --show ="
+  mpicc --show
   echo
   echo "================ CONFIG BEGIN ================"
   cat "${CONFIG_PATH}"
@@ -113,11 +126,13 @@ if [[ "${USE_MPI}" == "true" ]]; then
   mpirun -np "${NP}" \
     --map-by slot \
     --bind-to none \
-    --oversubscribe \
     -x WORKDIR \
     -x CONFIG_PATH \
     -x MAIN_GPU_LIST \
     -x PYTHONPATH \
+    -x PATH \
+    -x LD_LIBRARY_PATH \
+    -x OPAL_PREFIX \
     -x CUDA_DEVICE_ORDER \
     -x DEVITO_LOGGING \
     -x DEVITO_LANGUAGE \
@@ -127,10 +142,12 @@ if [[ "${USE_MPI}" == "true" ]]; then
     -x PROX_NVIDIA_VISIBLE_DEVICES \
     -x OMPI_CC \
     -x OMPI_CXX \
-    -x MPICC \
-    -x MPICXX \
     bash -lc '
       IFS=, read -r -a GPUS <<< "$MAIN_GPU_LIST"
+      if [[ ${OMPI_COMM_WORLD_RANK} -ge ${#GPUS[@]} ]]; then
+        echo "[ERR] rank ${OMPI_COMM_WORLD_RANK} out of range for MAIN_GPU_LIST=${MAIN_GPU_LIST}"
+        exit 1
+      fi
       export CUDA_VISIBLE_DEVICES="${GPUS[$OMPI_COMM_WORLD_RANK]}"
       export NVIDIA_VISIBLE_DEVICES="${GPUS[$OMPI_COMM_WORLD_RANK]}"
       export NV_ACC_DEVICE_NUM=0

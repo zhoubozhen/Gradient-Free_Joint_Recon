@@ -110,7 +110,7 @@ def fista_tv(pmeas, Nx, Ny, Nz,
              grad_min=None, cost_min=1e-8,
              saving_dir='', prox_mode=1, prox_impl='mix',
              prox_iter=50, out_print=3,
-             init_guess=None, mpi_rank=0,
+             init_guess=None, mpi_rank=0, comm=None,
              use_check=False, check_iter=5,
              save_freq=1,
              enable_tv=ENABLE_TV,
@@ -328,22 +328,76 @@ def fista_tv(pmeas, Nx, Ny, Nz,
                     prox_iter
                 )
 
+            # elif pmode == 2:
+            #     # subprocess prox (GPU split)
+            #     p0 = call_prox_subprocess(
+            #         p0y - (2.0 / lip) * dp0,
+            #         Nx, Ny, Nz,
+            #         2.0 * reg_param / lip,
+            #         positive_constraint,
+            #         prox_iter,
+            #         saving_dir=saving_dir,
+            #         iter_idx=iter,
+            #         mpi_rank=mpi_rank,
+            #         prox_impl=prox_impl,
+            #         worker_script=worker_script,
+            #         prox_cuda_visible_devices=prox_cuda_visible_devices,
+            #         prox_nvidia_visible_devices=prox_nvidia_visible_devices
+            #     )
             elif pmode == 2:
                 # subprocess prox (GPU split)
-                p0 = call_prox_subprocess(
-                    p0y - (2.0 / lip) * dp0,
-                    Nx, Ny, Nz,
-                    2.0 * reg_param / lip,
-                    positive_constraint,
-                    prox_iter,
-                    saving_dir=saving_dir,
-                    iter_idx=iter,
-                    mpi_rank=mpi_rank,
-                    prox_impl=prox_impl,
-                    worker_script=worker_script,
-                    prox_cuda_visible_devices=prox_cuda_visible_devices,
-                    prox_nvidia_visible_devices=prox_nvidia_visible_devices
-                )
+                prox_input = p0y - (2.0 / lip) * dp0
+
+                if comm is not None:
+                    # MPI: only rank 0 runs prox; then broadcast result
+                    if mpi_rank == 0:
+                        _log(
+                            f"Iter {iter} prox_mode==2: rank0 runs subprocess prox, then Bcast",
+                            mpi_rank
+                        )
+                        p0 = call_prox_subprocess(
+                            prox_input,
+                            Nx, Ny, Nz,
+                            2.0 * reg_param / lip,
+                            positive_constraint,
+                            prox_iter,
+                            saving_dir=saving_dir,
+                            iter_idx=iter,
+                            mpi_rank=mpi_rank,
+                            prox_impl=prox_impl,
+                            worker_script=worker_script,
+                            prox_cuda_visible_devices=prox_cuda_visible_devices,
+                            prox_nvidia_visible_devices=prox_nvidia_visible_devices
+                        )
+                        p0 = np.ascontiguousarray(p0, dtype=np.float32)
+                    else:
+                        _log(
+                            f"Iter {iter} prox_mode==2: rank {mpi_rank} skip subprocess prox, waiting for Bcast",
+                            mpi_rank
+                        )
+                        p0 = np.empty_like(prox_input, dtype=np.float32)
+
+                    comm.Bcast(p0, root=0)
+                    _log(
+                        f"Iter {iter} prox_mode==2: Bcast done",
+                        mpi_rank
+                    )
+                else:
+                    # non-MPI: keep original behavior
+                    p0 = call_prox_subprocess(
+                        prox_input,
+                        Nx, Ny, Nz,
+                        2.0 * reg_param / lip,
+                        positive_constraint,
+                        prox_iter,
+                        saving_dir=saving_dir,
+                        iter_idx=iter,
+                        mpi_rank=mpi_rank,
+                        prox_impl=prox_impl,
+                        worker_script=worker_script,
+                        prox_cuda_visible_devices=prox_cuda_visible_devices,
+                        prox_nvidia_visible_devices=prox_nvidia_visible_devices
+                    )
             else:
                 # fallback: keep original logic for other modes
                 if proximal_L is None:
