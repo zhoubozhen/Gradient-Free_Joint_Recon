@@ -21,7 +21,7 @@
     "div_patience": 2,
     "div_warmup": 2,
     "runtime": {
-      "worker_script": "/home/bozhen2/my_packages/fista_tranPACT/my_code/run_prox_worker.py"
+      "worker_script": "/home/bozhen2/my_packages/mpi_fista_tranPACT/my_code/run_prox_worker.py"
     }
   },
   "maxfun": 60,
@@ -32,8 +32,6 @@
   "ind": 3,
   "skullp0": 0,
   "paths": {
-    "nhp_directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250319_headphantom/data/",
-    "directory": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250727_JRwithAubry/",
     "saving_root": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/case_study/bozhen_try",
     "rec_pos_path": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250319_headphantom/data/mp_raw.DAT",
     "pressure_data_path": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250727_JRwithAubry/vit_data/nhp_3_nsp.hdf5",

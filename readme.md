@@ -9,13 +9,24 @@
 
 ------
 
+### 1.0 `mpi` 参数
+
+默认为`true`, 如果需要非mpi模式，可以在`mpi_config.json`里面设置为`false`,然后本地跑，这样的话主卡选取`main_gpu_idxs`的第一张卡。Condor环境禁止使用`false`。如果必须使用，
+
+```
+alias init_cluster='/home/bozhen2/my_packages/fista_tranPACT/my_code/init_cluster_workdir.sh'
+alias init_exp_cluster='/home/bozhen2/my_packages/fista_tranPACT/my_code/init_cluster_exp.sh'
+```
+
+用这个，即使用其他branch的版本，不要用本mpi版本。
+
 ### 1.1 `binding` 参数
 
-| 参数                   | 类型   | 含义                        | 当前示例        | 备注                   |
-| ---------------------- | ------ | --------------------------- | --------------- | ---------------------- |
-| `binding.main_gpu_idx` | int    | 主计算进程使用的 GPU 编号   | `6`             | 本地运行时常手动指定   |
-| `binding.prox_gpu_idx` | int    | prox worker 使用的 GPU 编号 | `7`             | 本地运行时常手动指定   |
-| `binding`              | object | GPU 绑定配置对象            | `{}` 或具体索引 | cluster 配置里通常留空 |
+| 参数                   | 类型   | 含义                        | 当前示例 | 备注               |
+| ---------------------- | ------ | --------------------------- | -------- | ------------------ |
+| `main_gpu_idxs`        | int    | 主计算进程使用的 GPU 编号   | `[0,1]`  | 本地运行时的主卡号 |
+| `binding.prox_gpu_idx` | int    | prox worker 使用的 GPU 编号 | `2`      | 本地运行时的副卡号 |
+| `binding`              | object | condor自动选取GPU           | `{}`     | cluster 配置里留空 |
 
 说明：
 
@@ -31,7 +42,7 @@
 | `fista.reg`          | float  | TV 正则项权重                 | `0.0001` | 越大正则越强，结果更平滑，常改                    |
 | `fista.lip`          | float  | Lipschitz 常数 / 步长相关参数 | `5.0`    | FISTA 稳定性关键参数之一，常改                    |
 | `fista.iter`         | int    | FISTA 最大迭代轮数            | `20`     | 每次外层调用时的内层迭代次数                      |
-| `fista.prox_mode`    | int    | prox 调用模式                 | `2`      | 1:main单卡模式；2：双卡模式main+prox各一张        |
+| `fista.prox_mode`    | int    | prox 调用模式                 | `2`      | 1:main单卡模式；2：双卡模式main+prox              |
 | `fista.prox_impl`    | string | prox 实现类型                 | `"mix"`  | mix:cpu+GPU混合实现,推荐；cupy：GPU实现，可能报错 |
 | `fista.prox_iter`    | int    | prox 内部迭代次数             | `50`     | TV proximal 子问题迭代数，一般不需要改            |
 | `fista.grad_min`     | float  | 梯度停止阈值                  | `1e-05`  | 可用于提前停止，一般不需要改                      |
@@ -54,9 +65,9 @@
 
 ### 1.3 `fista.runtime` 参数
 
-| 参数                          | 类型   | 含义                 | 当前示例                                      | 备注                                                     |
-| ----------------------------- | ------ | -------------------- | --------------------------------------------- | -------------------------------------------------------- |
-| `fista.runtime.worker_script` | string | prox worker 脚本路径 | `"${NEW_V2_ROOT}/my_code/run_prox_worker.py"` | local / cluster 初始化后可能会被改写成不同形式，不建议改 |
+| 参数            | 类型   | 含义                 | 当前示例                                                     | 备注                                                     |
+| --------------- | ------ | -------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| `worker_script` | string | prox worker 脚本路径 | `"/home/bozhen2/my_packages/mpi_fista_tranPACT/my_code/run_prox_worker.py"` | local / cluster 初始化后可能会被改写成不同形式，不建议改 |
 
 说明：
 
@@ -70,14 +81,14 @@
 
 ### 1.4 顶层主流程参数
 
-| 参数        | 类型   | 含义                       | 当前示例      | 备注                                                 |
-| ----------- | ------ | -------------------------- | ------------- | ---------------------------------------------------- |
-| `maxfun`    | int    | 外层优化最大函数评估次数   | `60`          | 控制 GFJR 外层搜索/评估预算，可改                    |
-| `stride`    | float  | 空间下采样步长             | `1.0`         | `1.0` 表示不下采样；增大降计算量比如5.0              |
-| `start`     | float  | 初始参数或初始模型缩放因子 | `1.05`        | 用于外层初始化，常改                                 |
-| `pressure`  | string | 压力数据标签/数据类型      | `"nhp_3_nsp"` | 由数据加载逻辑解释                                   |
-| `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",常改；1可能有bug |
-| `ind`       | int    | 样本索引 / case 索引       | `3`           | 常用于选择具体数据                                   |
+| 参数        | 类型   | 含义                       | 当前示例      | 备注                                                     |
+| ----------- | ------ | -------------------------- | ------------- | -------------------------------------------------------- |
+| `maxfun`    | int    | 外层优化最大函数评估次数   | `60`          | 控制 GFJR 外层搜索/评估预算，可改                        |
+| `stride`    | float  | 空间下采样步长             | `1.0`         | `1.0` 表示不下采样；增大，会降计算量，比如5.0是5倍下采样 |
+| `start`     | float  | 初始参数或初始模型缩放因子 | `1.05`        | 用于外层初始化，常改                                     |
+| `pressure`  | string | 压力数据标签/数据类型      | `"nhp_3_nsp"` | 由数据加载逻辑解释                                       |
+| `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",常改；1可能有bug     |
+| `ind`       | int    | 样本索引 / case 索引       | `3`           | 常用于选择具体数据                                       |
 | `skullp0`   | int    | 是否启用 skull p0 相关流程 | `0`           | 0:skull区域p0置零, 1: 不使用skull_roi                    |
 
 说明：
@@ -142,7 +153,7 @@
 | `physics.ppw`         | int         | points per wavelength  | `4`      | 影响离散精度与稳定性    |
 | `physics.fs`          | int / float | 采样频率               | `30`     | 时间采样设置            |
 | `physics.space_order` | int         | Devito 空间离散阶数    | `10`     | 越高通常越耗算力        |
-| `physics.to`          | int / float | 时间阶或相关传播参数   | `2`      | 具体解释由主程序定义    |
+| `physics.to`          | int / float | 时间阶数               | `2`      | 具体解释由主程序定义    |
 | `physics.nbl`         | int         | 吸收边界层厚度         | `16`     | Devito/PML 相关常用参数 |
 
 说明：
@@ -443,4 +454,3 @@ workdir/my_code/config.json
 2. 实验目录可独立改逻辑，不互相污染
 3. 本地和集群都能通过同一套模板快速初始化
 4. 调试和长期维护都尽量清晰
-
