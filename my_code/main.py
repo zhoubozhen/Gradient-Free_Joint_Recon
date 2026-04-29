@@ -23,13 +23,6 @@ def _load_json(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def _get_repo_root_from_file() -> str:
-    # .../repo_root/new_v2/my_code/main.py -> repo_root
-    this_file = os.path.abspath(__file__)
-    my_code_dir = os.path.dirname(this_file)
-    new_v2_dir = os.path.dirname(my_code_dir)
-    repo_root = os.path.dirname(new_v2_dir)
-    return repo_root
 
 def _set_env_before_cupy(cfg: dict):
     os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
@@ -117,7 +110,6 @@ def main():
     ap = argparse.ArgumentParser("GFJR main (config-driven)")
     ap.add_argument("--config", required=True, help="Path to config JSON")
     # 可选：CLI 覆盖（只给最常用的几个；需要更多再加）
-    ap.add_argument("--pressure", type=str, default=None)
     ap.add_argument("--recon_opt", type=int, default=None)
     ap.add_argument("--iter", type=int, default=None)
     ap.add_argument("--maxfun", type=int, default=None)
@@ -143,7 +135,7 @@ def main():
     cfg = _deep_update(cfg, cli_override)
 
     # 必填检查
-    for need in ["pressure", "recon_opt"]:
+    for need in [ "recon_opt"]:
         if need not in cfg or cfg[need] in [None, ""]:
             raise SystemExit(f"ERROR: config missing required field: {need}")
 
@@ -196,9 +188,7 @@ def main():
         DEBUG_SMALL = False
 
     # 常用实验参数
-    pressure = cfg["pressure"]
     recon_opt = int(cfg["recon_opt"])
-    ind = int(cfg.get("ind", 3))
     skullp0 = int(cfg.get("skullp0", 1))
     onlycor = bool(cfg.get("onlycor", False))
     noise_level = int(cfg.get("noise", 5))
@@ -242,7 +232,6 @@ def main():
 
     # paths（来自 config）
     paths = cfg.get("paths", {})
-    saving_root = paths["saving_root"]
 
     rec_pos_path = paths["rec_pos_path"]
 
@@ -449,7 +438,7 @@ def main():
     # -------------------------
     # 13) saving dir + log file
     # -------------------------
-    saving_dir = os.path.join(saving_root, f"{pressure}_fulltrace")
+    saving_dir = paths["saving_dir"]
     os.makedirs(saving_dir, exist_ok=True)
 
     if rank == 0:
@@ -570,9 +559,17 @@ def main():
     # -------------------------
     # 17) solve
     # -------------------------
-    c0 = np.array([4.0, 2.0], dtype=DTYPE) * start
-    lower = 0.9 * c0
-    upper = 1.1 * c0
+    if recon_opt == 0:
+        c0 = np.array([2.898, 1.1256], dtype=DTYPE)
+    elif recon_opt == 1:
+        c0 = np.array([3.164, 1.336, 2.314, 0.662], dtype=DTYPE)
+    else:
+        c0 = np.array([4.0, 2.0], dtype=DTYPE)
+
+    c0 *= start
+
+    lower = 0.85 * c0
+    upper = 1.15 * c0
 
     log("START GFJR.solve()")
     with StageTimer("GFJR.solve"):

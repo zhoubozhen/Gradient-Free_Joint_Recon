@@ -27,12 +27,10 @@
   "maxfun": 60,
   "stride": 1.0,
   "start": 1.05,
-  "pressure": "nhp_3_nsp",
   "recon_opt": 0,
-  "ind": 3,
   "skullp0": 0,
   "paths": {
-    "saving_root": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/case_study/bozhen_try",
+    "saving_dir": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/case_study/test",
     "rec_pos_path": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250319_headphantom/data/mp_raw.DAT",
     "pressure_data_path": "/shared/anastasio-s3/CommonData/bozhen/gfjr_data/kevin_rsaas/KH250727_JRwithAubry/vit_data/nhp_3_nsp.hdf5",
     "pressure_data_key": "forward",
