@@ -1,179 +1,221 @@
 # fista_tranPACT
 
-基于 TranPACT + FISTA-TV 的梯度自由联合重建包。
+A gradient-free joint reconstruction package based on TranPACT + FISTA-TV.
 
-## 1. 参数说明总表
+## 1. Parameter Overview
 
-下面参数同时适用于 `config.json` 和 `cluster_config.json`。
- 若某个参数只在本地或 cluster 场景下更常用，会在备注中说明。
+The following parameters apply to both `config.json` and `cluster_config.json`.
+
+If a parameter is mainly used only in local or cluster scenarios, it will be noted in the remarks.
 
 ------
 
-### 1.0 `mpi` 参数
+### 1.0 `mpi` Parameter
 
-默认为`true`, 如果需要非mpi模式，可以在`mpi_config.json`里面设置为`false`,然后本地跑，这样的话主卡选取`main_gpu_idxs`的第一张卡。Condor环境禁止使用`false`。如果必须使用，
+The default value is `true`.
+
+If non-MPI mode is needed, set `mpi` to `false` in `mpi_config.json` and run locally. In this case, the main GPU will be selected as the first GPU in `main_gpu_idxs`.
+
+The Condor environment does **not** allow `mpi=false`.
+
+If non-MPI mode must be used, use the following scripts instead:
 
 ```
 alias init_cluster='/home/bozhen2/my_packages/fista_tranPACT/my_code/init_cluster_workdir.sh'
 alias init_exp_cluster='/home/bozhen2/my_packages/fista_tranPACT/my_code/init_cluster_exp.sh'
 ```
 
-用这个，即使用其他branch的版本，不要用本mpi版本。
-
-### 1.1 `binding` 参数
-
-| 参数                   | 类型   | 含义                        | 当前示例 | 备注               |
-| ---------------------- | ------ | --------------------------- | -------- | ------------------ |
-| `main_gpu_idxs`        | int    | 主计算进程使用的 GPU 编号   | `[0,1]`  | 本地运行时的主卡号 |
-| `binding.prox_gpu_idx` | int    | prox worker 使用的 GPU 编号 | `2`      | 本地运行时的副卡号 |
-| `binding`              | object | condor自动选取GPU           | `{}`     | cluster 配置里留空 |
-
-说明：
-
-- 本地运行时，主 GPU 和 prox GPU推荐在a9:0-2或者3-7；在ein推荐0-3或者4-7；即不要在a9:主卡0副卡3，不要在ein：主卡1副卡5.
-- cluster 运行时一般由调度系统分配 GPU，因此 `cluster_config.json` 中这一项常为空对象。
+That is, use other branch versions instead of this MPI version.
 
 ------
 
-### 1.2 `fista` 参数
+### 1.1 `binding` Parameters
 
-| 参数                 | 类型   | 含义                          | 当前示例 | 备注                                              |
-| -------------------- | ------ | ----------------------------- | -------- | ------------------------------------------------- |
-| `fista.reg`          | float  | TV 正则项权重                 | `0.0001` | 越大正则越强，结果更平滑，常改                    |
-| `fista.lip`          | float  | Lipschitz 常数 / 步长相关参数 | `5.0`    | FISTA 稳定性关键参数之一，常改                    |
-| `fista.iter`         | int    | FISTA 最大迭代轮数            | `20`     | 每次外层调用时的内层迭代次数                      |
-| `fista.prox_mode`    | int    | prox 调用模式                 | `2`      | 1:main单卡模式；2：双卡模式main+prox              |
-| `fista.prox_impl`    | string | prox 实现类型                 | `"mix"`  | mix:cpu+GPU混合实现,推荐；cupy：GPU实现，可能报错 |
-| `fista.prox_iter`    | int    | prox 内部迭代次数             | `50`     | TV proximal 子问题迭代数，一般不需要改            |
-| `fista.grad_min`     | float  | 梯度停止阈值                  | `1e-05`  | 可用于提前停止，一般不需要改                      |
-| `fista.cost_min`     | float  | 代价函数停止阈值              | `0.001`  | 可用于提前停止，一般不需要改                      |
-| `fista.save_freq`    | int    | 中间结果保存频率              | `1`      | 每几轮保存一次，可改                              |
-| `fista.use_check`    | bool   | 是否启用收敛/发散检查         | `true`   | 开启后使用下方阈值规则，一般建议开启              |
-| `fista.check_iter`   | int    | 检查频率                      | `1`      | 每若干轮检查一次                                  |
-| `fista.rel_thr`      | float  | 相对变化收敛阈值              | `0.01`   | 连续小变化时可判定收敛，常改                      |
-| `fista.rel_patience` | int    | 收敛判定耐心轮数              | `2`      | 连续满足多少次才停止，可改                        |
-| `fista.rel_warmup`   | int    | 收敛检测预热轮数              | `2`      | 前几轮不做收敛判定，一般不改                      |
-| `fista.div_rel_thr`  | float  | 发散相对变化阈值              | `0.01`   | 超过该阈值可视为异常增长，可改                    |
-| `fista.div_patience` | int    | 发散判定耐心轮数              | `2`      | 连续异常多少次才判发散，可改                      |
-| `fista.div_warmup`   | int    | 发散检测预热轮数              | `2`      | 前几轮不做发散判定，一般不改                      |
+| Parameter              | Type   | Meaning                                  | Current Example | Remarks                       |
+| ---------------------- | ------ | ---------------------------------------- | --------------- | ----------------------------- |
+| `main_gpu_idxs`        | int    | GPU indices used by the main computation | `[0,1]`         | Main GPUs for local runs      |
+| `binding.prox_gpu_idx` | int    | GPU index used by the prox worker        | `2`             | Auxiliary GPU for local runs  |
+| `binding`              | object | GPU selection handled by Condor          | `{}`            | Leave empty in cluster config |
 
-说明：
+Notes:
 
-- 这是当前最常改的一组参数。
+- For local runs, it is recommended to keep the main GPU and prox GPU within the same GPU group:
+  - On `a9`: use `0-2` or `3-7`
+  - On `ein`: use `0-3` or `4-7`
+- Avoid cross-group assignment, such as:
+  - On `a9`: main GPU `0`, prox GPU `3`
+  - On `ein`: main GPU `1`, prox GPU `5`
+- For cluster runs, GPUs are usually assigned by the scheduler, so this field is usually left as an empty object in `cluster_config.json`.
 
 ------
 
-### 1.3 `fista.runtime` 参数
+### 1.2 `fista` Parameters
 
-| 参数            | 类型   | 含义                 | 当前示例                                                     | 备注                                                     |
-| --------------- | ------ | -------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
-| `worker_script` | string | prox worker 脚本路径 | `"/home/bozhen2/my_packages/mpi_fista_tranPACT/my_code/run_prox_worker.py"` | local / cluster 初始化后可能会被改写成不同形式，不建议改 |
+| Parameter            | Type   | Meaning                                         | Current Example | Remarks                                                      |
+| -------------------- | ------ | ----------------------------------------------- | --------------- | ------------------------------------------------------------ |
+| `fista.reg`          | float  | TV regularization weight                        | `0.0001`        | Larger value means stronger regularization and smoother results. Commonly tuned. |
+| `fista.lip`          | float  | Lipschitz constant / step-size-related value    | `5.0`           | One of the key parameters for FISTA stability. Commonly tuned. |
+| `fista.iter`         | int    | Maximum number of FISTA iterations              | `20`            | Number of inner iterations for each outer call.              |
+| `fista.prox_mode`    | int    | Prox execution mode                             | `2`             | `1`: main single-GPU mode; `2`: dual-GPU mode with main + prox. |
+| `fista.prox_impl`    | string | Prox implementation type                        | `"mix"`         | `mix`: CPU+GPU mixed implementation, recommended; `cupy`: GPU implementation, may cause errors. |
+| `fista.prox_iter`    | int    | Number of internal prox iterations              | `50`            | Number of iterations for the TV proximal subproblem. Usually no need to change. |
+| `fista.grad_min`     | float  | Gradient stopping threshold                     | `1e-05`         | Can be used for early stopping. Usually no need to change.   |
+| `fista.cost_min`     | float  | Cost-function stopping threshold                | `0.001`         | Can be used for early stopping. Usually no need to change.   |
+| `fista.save_freq`    | int    | Intermediate result saving frequency            | `1`             | Save once every N iterations. Can be changed.                |
+| `fista.use_check`    | bool   | Whether to enable convergence/divergence checks | `true`          | When enabled, the threshold rules below are used. Usually recommended. |
+| `fista.check_iter`   | int    | Check frequency                                 | `1`             | Check once every N iterations.                               |
+| `fista.rel_thr`      | float  | Relative-change convergence threshold           | `0.01`          | If the relative change remains small for consecutive checks, convergence can be declared. Commonly tuned. |
+| `fista.rel_patience` | int    | Patience for convergence detection              | `2`             | Number of consecutive satisfied checks required before stopping. Can be changed. |
+| `fista.rel_warmup`   | int    | Warmup iterations before convergence checking   | `2`             | No convergence check during the first few iterations. Usually unchanged. |
+| `fista.div_rel_thr`  | float  | Relative-change divergence threshold            | `0.01`          | Values above this threshold can be treated as abnormal growth. Can be changed. |
+| `fista.div_patience` | int    | Patience for divergence detection               | `2`             | Number of consecutive abnormal checks required before declaring divergence. Can be changed. |
+| `fista.div_warmup`   | int    | Warmup iterations before divergence checking    | `2`             | No divergence check during the first few iterations. Usually unchanged. |
 
-说明：
+Notes:
 
-- 该参数指定 prox worker 的启动脚本。
-- 在模板里通常写成占位形式；初始化 workdir 后：
-  - local 场景可能会被改成 `my_code/run_prox_worker.py`
-  - cluster 场景可能会被改成包内绝对路径
-- 这是运行时依赖项，不建议手动随意改名。
-
-------
-
-### 1.4 顶层主流程参数
-
-| 参数        | 类型   | 含义                       | 当前示例      | 备注                                                     |
-| ----------- | ------ | -------------------------- | ------------- | -------------------------------------------------------- |
-| `maxfun`    | int    | 外层优化最大函数评估次数   | `60`          | 控制 GFJR 外层搜索/评估预算，可改                        |
-| `stride`    | float  | 空间下采样步长             | `1.0`         | `1.0` 表示不下采样；增大，会降计算量，比如5.0是5倍下采样 |
-| `start`     | float  | 初始参数或初始模型缩放因子 | `1.05`        | 用于外层初始化，常改                                     |
-| `pressure`  | string | 压力数据标签/数据类型      | `"nhp_3_nsp"` | 由数据加载逻辑解释                                       |
-| `recon_opt` | int    | 重建流程选项               | `0`           | 0:"homo1layer",1:"3layer",2:"aubry",常改；1可能有bug     |
-| `ind`       | int    | 样本索引 / case 索引       | `3`           | 常用于选择具体数据                                       |
-| `skullp0`   | int    | 是否启用 skull p0 相关流程 | `0`           | 0:skull区域p0置零, 1: 不使用skull_roi                    |
-
-说明：
-
-- 这一组位于 `fista` 后面，属于主流程控制参数。
+- This is currently the most commonly tuned group of parameters.
 
 ------
 
-### 1.5 `paths` 参数
+### 1.3 `fista.runtime` Parameters
 
-| 参数                  | 类型   | 含义               | 当前示例                         | 备注                                 |
-| --------------------- | ------ | ------------------ | -------------------------------- | ------------------------------------ |
-| `paths.nhp_directory` | string | NHP 参考数据目录   | `.../KH250319_headphantom/data/` | 读取参考/辅助数据时使用              |
-| `paths.directory`     | string | 当前实验主数据目录 | `.../KH250727_JRwithAubry/`      | 主输入数据路径                       |
-| `paths.saving_root`   | string | 输出保存根目录     | `.../case_study`                 | 重建结果、日志、迭代输出等保存在这里 |
+| Parameter       | Type   | Meaning                    | Current Example                                              | Remarks                                                      |
+| --------------- | ------ | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| `worker_script` | string | Path to prox worker script | `"/home/bozhen2/my_packages/mpi_fista_tranPACT/my_code/run_prox_worker.py"` | May be rewritten into different forms after local / cluster initialization. Not recommended to change manually. |
 
-说明：
+Notes:
 
-- 这一组是最容易因换机器、换数据而需要修改的参数。
-- 这里配置的是**数据路径**和**结果输出路径**，不是包路径。
-- 新建实验时，通常第一时间检查这一组是否正确。
-
-------
-
-### 1.6 其他较少改动的顶层参数
-
-| 参数          | 类型  | 含义                   | 当前示例  | 备注                                     |
-| ------------- | ----- | ---------------------- | --------- | ---------------------------------------- |
-| `onlycor`     | bool  | 是否只执行校正相关步骤 | `false`   | 只使用cor，默认关闭                      |
-| `noise`       | int   | 噪声级别控制参数       | `5`       | 与 `noise_scale` 联合使用                |
-| `noise_scale` | float | 噪声幅度缩放           | `0.00026` | 基本，实际噪声幅度 = noise * noise_scale |
-
-说明：
-
-- 这一组位于 `paths` 之后。相对不常改，通常只在特定实验或调试时调整。
+- This parameter specifies the launch script for the prox worker.
+- In the template, it is usually written as a placeholder.
+- After initializing a workdir:
+  - In local scenarios, it may be rewritten as `my_code/run_prox_worker.py`
+  - In cluster scenarios, it may be rewritten as an absolute path inside the package
+- This is a runtime dependency. Do not rename it manually unless necessary.
 
 ------
 
-### 1.7 `runtime` 参数
+### 1.4 Top-Level Main Workflow Parameters
 
-| 参数                           | 类型 | 含义                    | 当前示例 | 备注                                |
-| ------------------------------ | ---- | ----------------------- | -------- | ----------------------------------- |
-| `runtime.debug_small`          | bool | 是否启用小规模调试模式  | `true`   | 常用于快速试跑，当stride=1等于false |
-| `runtime.debug_only_one_fista` | bool | 是否只跑一次 FISTA 调试 | `false`  | 快速排查用                          |
-| `runtime.debug_nt`             | int  | 调试时使用的时间步数    | `4800`   | 缩小时间维规模                      |
-| `runtime.trace_full`           | bool | 是否开启完整 trace/log  | `true`   | 调试时很有用                        |
-| `runtime.heartbeat_sec`        | int  | 心跳日志间隔（秒）      | `60`     | 避免长时间无输出                    |
-| `runtime.log_gpu`              | bool | 是否记录 GPU 状态       | `true`   | 便于检查 GPU 绑定和使用情况         |
+| Parameter   | Type  | Meaning                                           | Current Example | Remarks                                                      |
+| ----------- | ----- | ------------------------------------------------- | --------------- | ------------------------------------------------------------ |
+| `maxfun`    | int   | Maximum number of outer function evaluations      | `60`            | Controls the outer GFJR search/evaluation budget. Can be changed. |
+| `stride`    | float | Spatial downsampling stride                       | `1.0`           | `1.0` means no downsampling. Larger values reduce computation. For example, `5.0` means 5x downsampling. |
+| `start`     | float | Initial parameter or initial model scaling factor | `1.05`          | Used for outer initialization. Commonly tuned.               |
+| `recon_opt` | int   | Reconstruction option                             | `0`             | `0`: `"homo1layer"`; `1`: `"3layer"`; `2`: `"aubry"`. Commonly changed. |
+| `skullp0`   | int   | Whether to enable skull-p0-related logic          | `0`             | `0`: set p0 to zero in skull region; `1`: do not use `skull_roi`. |
 
-说明：
+Notes:
 
-- 这一组主要控制运行时调试、日志和可观测性。不常改。
-
-------
-
-### 1.8 `physics` 参数
-
-| 参数                  | 类型        | 含义                   | 当前示例 | 备注                    |
-| --------------------- | ----------- | ---------------------- | -------- | ----------------------- |
-| `physics.cb`          | float       | 背景声速或相关物理参数 | `1.5`    | 单位由代码约定          |
-| `physics.f0`          | float       | 中心频率               | `1.0`    | 用于波场/信号模型       |
-| `physics.ppw`         | int         | points per wavelength  | `4`      | 影响离散精度与稳定性    |
-| `physics.fs`          | int / float | 采样频率               | `30`     | 时间采样设置            |
-| `physics.space_order` | int         | Devito 空间离散阶数    | `10`     | 越高通常越耗算力        |
-| `physics.to`          | int / float | 时间阶数               | `2`      | 具体解释由主程序定义    |
-| `physics.nbl`         | int         | 吸收边界层厚度         | `16`     | Devito/PML 相关常用参数 |
-
-说明：
-
-- 这一组控制物理模型与数值离散。不常改。
+- This group is located after `fista` and controls the main workflow.
 
 ------
 
-### 1.9 末尾其他参数
+### 1.5 `paths` Parameters
 
-| 参数               | 类型   | 含义             | 当前示例 | 备注                     |
-| ------------------ | ------ | ---------------- | -------- | ------------------------ |
-| `devito_log_level` | string | Devito 日志级别  | `"INFO"` | 常见有 `INFO`、`WARNING` |
-| `out_print`        | int    | 输出信息详细程度 | `3`      | 数值越大通常日志越详细   |
+The `paths` section defines all input data paths and the output directory used by the current experiment.
 
-说明：
+| Parameter                      | Type   | Meaning                                           | Notes                                                        |
+| ------------------------------ | ------ | ------------------------------------------------- | ------------------------------------------------------------ |
+| `paths.saving_dir`             | string | Output directory for the current experiment       | All reconstruction outputs, logs, intermediate FISTA results, and `args_record.json` are saved here. This is the main path to change for a new run. |
+| `paths.rec_pos_path`           | string | Receiver position file                            | Binary `.DAT` file loaded as receiver coordinates. Usually shared across cases. |
+| `paths.pressure_data_path`     | string | Measured / simulated pressure data file           | HDF5 input file used as the forward pressure data. Usually changes when switching cases. |
+| `paths.pressure_data_key`      | string | Dataset key inside the pressure HDF5 file         | Usually `"forward"`. Do not change unless the HDF5 internal dataset name changes. |
+| `paths.noise_data_path`        | string | Noise data file                                   | HDF5 noise file used when `noise != 0`.                      |
+| `paths.noise_data_key`         | string | Dataset key inside the noise HDF5 file            | Usually `"forward"`. Do not change unless the HDF5 internal dataset name changes. |
+| `paths.fn_path_recon0`         | string | Medium parameter table for `recon_opt = 0`        | Used when running the homogeneous 1-layer / recon0 setting.  |
+| `paths.fn_path_recon1`         | string | Medium parameter table for `recon_opt = 1`        | Used when running the 3-layer / recon1 setting.              |
+| `paths.fn_path_recon2`         | string | Medium parameter table for `recon_opt = 2`        | Used when running the Aubry / water-bone setting.            |
+| `paths.opt_roi_path`           | string | Optical ROI file                                  | Binary ROI mask loaded and reshaped into the reconstruction volume. |
+| `paths.cor_roi_path`           | string | Cortex ROI file                                   | NumPy `.npy` ROI file. Used when `onlycor = true`.           |
+| `paths.skull_roi_path`         | string | Skull ROI file                                    | NumPy `.npy` skull mask. Used when `skullp0 = 0` to zero out the skull region in `opt_roi`. |
+| `paths.medium_mat_path_recon0` | string | Medium geometry `.mat` file for `recon_opt = 0`   | Loaded only when `recon_opt = 0`.                            |
+| `paths.medium_mat_key_recon0`  | string | Variable key inside the recon0 medium `.mat` file | Usually `"annhp"`.                                           |
+| `paths.medium_mat_path_recon1` | string | Medium geometry `.mat` file for `recon_opt = 1`   | Loaded only when `recon_opt = 1`.                            |
+| `paths.medium_mat_key_recon1`  | string | Variable key inside the recon1 medium `.mat` file | Usually `"annhp"`.                                           |
+| `paths.ctdata_mat_path`        | string | CT data `.mat` file for `recon_opt = 2`           | Loaded only when `recon_opt = 2`.                            |
+| `paths.ctdata_mat_key`         | string | Variable key inside the CT `.mat` file            | Usually `"ct_data"`.                                         |
 
-- 这两个参数现在位于 JSON 末尾。一般属于输出与日志控制，不是常规调参重点。
+Notes:
 
-## 2. 包结构
+- `paths.saving_dir` is the only output directory field currently used by `main.py`.
+- `paths.saving_root` is no longer needed if the code uses `paths.saving_dir` directly.
+- The `pressure` field is also no longer needed for constructing the output path if `saving_dir` is explicitly provided.
+- When starting a new experiment, usually update:
+  - `paths.saving_dir`
+  - `paths.pressure_data_path`
+  - the corresponding `fn_path_recon*`
+  - the corresponding medium / CT path if `recon_opt` changes
+- Do not modify the key fields such as `pressure_data_key`, `noise_data_key`, `medium_mat_key_recon0`, `medium_mat_key_recon1`, and `ctdata_mat_key` unless the internal variable names inside the input files are different.
+
+------
+
+### 1.6 Other Less Frequently Changed Top-Level Parameters
+
+| Parameter     | Type  | Meaning                                      | Current Example | Remarks                                         |
+| ------------- | ----- | -------------------------------------------- | --------------- | ----------------------------------------------- |
+| `onlycor`     | bool  | Whether to run only correction-related steps | `false`         | Use only cor. Disabled by default.              |
+| `noise`       | int   | Noise-level control parameter                | `5`             | Used together with `noise_scale`.               |
+| `noise_scale` | float | Noise amplitude scaling                      | `0.00026`       | Actual noise amplitude = `noise * noise_scale`. |
+
+Notes:
+
+- This group is located after `paths`.
+- It is relatively less frequently changed and is usually adjusted only for specific experiments or debugging.
+
+------
+
+### 1.7 `runtime` Parameters
+
+| Parameter                      | Type | Meaning                                          | Current Example | Remarks                                                      |
+| ------------------------------ | ---- | ------------------------------------------------ | --------------- | ------------------------------------------------------------ |
+| `runtime.debug_small`          | bool | Whether to enable small-scale debug mode         | `true`          | Often used for quick test runs. When `stride=1`, it becomes false. |
+| `runtime.debug_only_one_fista` | bool | Whether to run only one FISTA call for debugging | `false`         | Useful for quick diagnosis.                                  |
+| `runtime.debug_nt`             | int  | Number of time steps used in debug mode          | `4800`          | Reduces the time dimension size.                             |
+| `runtime.trace_full`           | bool | Whether to enable full trace/logging             | `true`          | Useful for debugging.                                        |
+| `runtime.heartbeat_sec`        | int  | Heartbeat log interval in seconds                | `60`            | Prevents long periods without output.                        |
+| `runtime.log_gpu`              | bool | Whether to record GPU status                     | `true`          | Useful for checking GPU binding and usage.                   |
+
+Notes:
+
+- This group mainly controls runtime debugging, logging, and observability.
+- It is not commonly changed.
+
+------
+
+### 1.8 `physics` Parameters
+
+| Parameter             | Type        | Meaning                                                 | Current Example | Remarks                                          |
+| --------------------- | ----------- | ------------------------------------------------------- | --------------- | ------------------------------------------------ |
+| `physics.cb`          | float       | Background speed of sound or related physical parameter | `1.5`           | Unit is defined by the code.                     |
+| `physics.f0`          | float       | Center frequency                                        | `1.0`           | Used in the wavefield/signal model.              |
+| `physics.ppw`         | int         | Points per wavelength                                   | `4`             | Affects discretization accuracy and stability.   |
+| `physics.fs`          | int / float | Sampling frequency                                      | `30`            | Time sampling setting.                           |
+| `physics.space_order` | int         | Devito spatial discretization order                     | `10`            | Higher values usually require more computation.  |
+| `physics.to`          | int / float | Time order                                              | `2`             | Specific meaning is defined by the main program. |
+| `physics.nbl`         | int         | Absorbing boundary layer thickness                      | `16`            | Common Devito/PML-related parameter.             |
+
+Notes:
+
+- This group controls the physical model and numerical discretization.
+- It is not commonly changed.
+
+------
+
+### 1.9 Other Parameters at the End
+
+| Parameter          | Type   | Meaning                | Current Example | Remarks                                        |
+| ------------------ | ------ | ---------------------- | --------------- | ---------------------------------------------- |
+| `devito_log_level` | string | Devito log level       | `"INFO"`        | Common values include `INFO` and `WARNING`.    |
+| `out_print`        | int    | Output verbosity level | `3`             | Larger values usually mean more detailed logs. |
+
+Notes:
+
+- These two parameters are currently located at the end of the JSON file.
+- They generally control output and logging, and are not the main tuning parameters.
+
+------
+
+## 2. Package Structure
 
 ```
 fista_tranPACT/
@@ -194,20 +236,20 @@ fista_tranPACT/
     └── gfjr_utils.py
 ```
 
-设计逻辑：
+Design logic:
 
-- `src/`：核心工具库，作为唯一真源。
-- `my_code/`：运行入口、模板脚本、配置文件。
-- 本地/集群工作目录只复制 `my_code/*`。
-- `src/` 不复制到每个 workdir，而是统一直接引用包内版本。
+- `src/`: core utility library and the single source of truth.
+- `my_code/`: runtime entry points, template scripts, and configuration files.
+- Local/cluster workdirs only copy `my_code/*`.
+- `src/` is not copied into every workdir. Instead, every workdir directly references the package-level version.
 
 ------
 
-## 3. 使用方式
+## 3. Usage
 
-### 3.1 本地运行
+### 3.1 Local Run
 
-先在一个新的工作目录中初始化：
+First, initialize a new workdir:
 
 ```
 mkdir -p /path/to/your_workdir
@@ -215,14 +257,14 @@ cd /path/to/your_workdir
 init_local
 ```
 
-然后运行：
+Then run:
 
 ```
 cd my_code
 bash run_local.sh
 ```
 
-本地日志默认写到：
+Local logs are written by default to:
 
 ```
 ../logs/YYYYMMDD_HHMM.log
@@ -230,9 +272,9 @@ bash run_local.sh
 
 ------
 
-### 3.2 集群运行
+### 3.2 Cluster Run
 
-先初始化一个新的 cluster workdir：
+First, initialize a new cluster workdir:
 
 ```
 mkdir -p /path/to/your_cluster_workdir
@@ -240,14 +282,14 @@ cd /path/to/your_cluster_workdir
 init_cluster
 ```
 
-提交任务：
+Submit the job:
 
 ```
 cd my_code
 condor_submit cluster.sub
 ```
 
-集群日志通常写到：
+Cluster logs are usually written to:
 
 ```
 ../logs/
@@ -256,115 +298,118 @@ condor_submit cluster.sub
 
 ------
 
-## 4. 整体逻辑
+## 4. Overall Logic
 
-这套包分成三层：
+This package is divided into three layers:
 
-### 4.1 工具层
+### 4.1 Utility Layer
 
-位于：
+Located at:
 
 ```
 src/
 ```
 
-包含：
+Includes:
 
 - `tranPACT`
 - `fista_tv_3d_python`
 - `gfjr_utils.py`
 
-这部分是所有 workdir 共享的公共工具库。
- 如果 TranPACT / FISTA 的核心实现已经稳定，后续一般不需要频繁改这里。
+This part is the shared utility library used by all workdirs.
+
+If the core implementations of TranPACT / FISTA are already stable, this layer usually does not need frequent changes.
 
 ------
 
-### 4.2 模板层
+### 4.2 Template Layer
 
-位于：
+Located at:
 
 ```
 my_code/
 ```
 
-包含：
+Includes:
 
 - `main.py`
 - `config.json`
 - `cluster_config.json`
-- 初始化脚本
-- 运行脚本
-- worker 脚本
+- initialization scripts
+- run scripts
+- worker scripts
 
-这部分决定“未来新初始化出来的 workdir 默认长什么样”。
-
-------
-
-### 4.3 工作目录层
-
-每次执行初始化脚本后，会在当前 workdir 下生成一套 `my_code/*` 副本。
-
-这意味着：
-
-- 修改 `workdir/my_code/main.py` 只影响当前实验目录
-- 修改 `~/my_packages/fista_tranPACT/my_code/main.py` 会影响未来新初始化的目录
-- 修改 `~/my_packages/fista_tranPACT/src/*` 会影响所有 workdir
+This layer determines what newly initialized workdirs will look like by default.
 
 ------
 
-## 5. 推荐维护方式
+### 4.3 Workdir Layer
 
-### 5.1 基础工具尽量稳定
+Each time an initialization script is executed, a copy of `my_code/*` is generated under the current workdir.
 
-如果 `tranPACT`、`FISTA-TV`、`gfjr_utils` 已经稳定，建议尽量少改：
+This means:
+
+- Modifying `workdir/my_code/main.py` only affects the current experiment directory.
+- Modifying `~/my_packages/fista_tranPACT/my_code/main.py` affects future newly initialized directories.
+- Modifying `~/my_packages/fista_tranPACT/src/*` affects all workdirs.
+
+------
+
+## 5. Recommended Maintenance Strategy
+
+### 5.1 Keep the Base Utilities Stable
+
+If `tranPACT`, `FISTA-TV`, and `gfjr_utils` are already stable, avoid modifying the following directory unless necessary:
 
 ```
 ~/my_packages/fista_tranPACT/src/
 ```
 
-因为这部分一旦改动，会影响所有工作目录。
+Once this part is changed, all workdirs will be affected.
 
 ------
 
-### 5.2 实验逻辑改 workdir 里的 `main.py`
+### 5.2 Modify `main.py` Inside the Workdir for Experiment Logic
 
-如果只是当前实验要调整逻辑、加日志、改调参流程，优先改：
+If the change is only for the current experiment, such as adjusting logic, adding logs, or changing the tuning flow, prioritize modifying:
 
 ```
-你的workdir/my_code/main.py
-你的workdir/my_code/config.json
+your_workdir/my_code/main.py
+your_workdir/my_code/config.json
 ```
 
-这样不会影响其他目录，也不会污染模板。
+This avoids affecting other directories and avoids polluting the template.
 
 ------
 
-### 5.3 模板升级改包内 `my_code`
+### 5.3 Modify Package-Level `my_code` for Template Updates
 
-如果你确认某个改动以后所有新工作目录都需要继承，就改：
+If a change should be inherited by all newly initialized workdirs in the future, modify:
 
 ```
 ~/my_packages/fista_tranPACT/my_code/
 ```
 
-然后重新初始化新的 workdir。
+Then re-initialize a new workdir.
 
 ------
 
-## 6. `config.json` 与 `cluster_config.json`
+## 6. `config.json` and `cluster_config.json`
 
-这两个配置目前结构基本一致。
+The structures of these two configuration files are currently mostly the same.
 
-常见区别是：
+Common differences:
 
-- `config.json`：本地运行时可指定固定 GPU
-- `cluster_config.json`：通常留空绑定，由集群环境决定 GPU 分配
+- `config.json`: used for local runs and can specify fixed GPUs.
+- `cluster_config.json`: usually leaves GPU binding empty and lets the cluster environment decide GPU allocation.
 
-## 7. `config.json` 与 `cluster_config.json` 的实际建议
+------
 
-### 本地运行建议
+## 7. Practical Recommendations for `config.json` and `cluster_config.json`
 
-优先改：
+### Local Run Recommendations
+
+Prioritize modifying:
 
 - `binding.main_gpu_idx`
 - `binding.prox_gpu_idx`
@@ -372,85 +417,85 @@ my_code/
 - `runtime.debug_*`
 - `fista.*`
 
-适合快速调试、确认逻辑、单机测试。
+Suitable for quick debugging, logic verification, and single-machine testing.
 
 ------
 
-### 集群运行建议
+### Cluster Run Recommendations
 
-优先改：
+Prioritize modifying:
 
 - `paths.*`
 - `runtime.*`
 - `physics.*`
 - `fista.*`
 
-通常不建议在 `cluster_config.json` 里写死 GPU 编号，除非集群环境就是固定卡位。
+Usually, it is not recommended to hard-code GPU indices in `cluster_config.json`, unless the cluster environment uses fixed GPU positions.
 
 ------
 
-## 8. 常见工作流建议
+## 8. Common Workflow Recommendations
 
-### 8.1 新实验
+### 8.1 New Experiment
 
-1. 新建 workdir
-2. 用 `init_local_workdir.sh` 或 `init_cluster_workdir.sh` 初始化
-3. 修改该 workdir 下的 `my_code/config.json`
-4. 必要时修改该 workdir 下的 `my_code/main.py`
-5. 运行
+1. Create a new workdir.
+2. Initialize it using `init_local_workdir.sh` or `init_cluster_workdir.sh`.
+3. Modify `my_code/config.json` inside that workdir.
+4. Modify `my_code/main.py` inside that workdir if necessary.
+5. Run the experiment.
 
 ------
 
-### 8.2 只改当前实验
+### 8.2 Modify Only the Current Experiment
 
-只改：
+Only modify:
 
 ```
 workdir/my_code/main.py
 workdir/my_code/config.json
 ```
 
-不动包内模板。
+Do not modify the package-level template.
 
 ------
 
-### 8.3 更新未来默认模板
+### 8.3 Update the Future Default Template
 
-改：
+Modify:
 
 ```
 ~/my_packages/fista_tranPACT/my_code/*
 ```
 
-这样以后新 init 的 workdir 都继承这些改动。
+Then all newly initialized workdirs will inherit these changes.
 
 ------
 
-### 8.4 修改基础算法/工具
+### 8.4 Modify Base Algorithms / Utilities
 
-改：
+Modify:
 
 ```
 ~/my_packages/fista_tranPACT/src/*
 ```
 
-这会影响所有 workdir，需谨慎。
+This affects all workdirs and should be done carefully.
 
 ------
 
-## 9. 当前版本的设计原则
+## 9. Current Version Design Principles
 
-当前版本已经稳定在以下原则上：
+The current version is stabilized around the following principles:
 
-- `src/` 是唯一工具库
-- `my_code/` 是模板和入口集合
-- 本地/集群 workdir 只复制 `my_code/*`
-- workdir 可以单独修改 `main.py`
-- 基础工具与实验逻辑分层维护
+- `src/` is the only utility library.
+- `my_code/` contains templates and entry points.
+- Local/cluster workdirs only copy `my_code/*`.
+- Each workdir can modify its own `main.py` independently.
+- Base utilities and experiment logic are maintained in separate layers.
 
-这套结构的目标是：
+The goal of this structure is:
 
-1. 工具统一维护，不复制、不漂移
-2. 实验目录可独立改逻辑，不互相污染
-3. 本地和集群都能通过同一套模板快速初始化
-4. 调试和长期维护都尽量清晰
+1. Maintain tools centrally without copying or drifting.
+2. Allow each experiment directory to modify its logic independently without interfering with others.
+3. Quickly initialize both local and cluster runs from the same template.
+4. Keep debugging and long-term maintenance as clear as possible.
