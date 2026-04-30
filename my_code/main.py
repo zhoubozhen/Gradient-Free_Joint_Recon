@@ -126,7 +126,7 @@ def main():
 
     # CLI 覆盖 config（最少维护成本）
     cli_override = {}
-    for k in ["pressure", "recon_opt", "iter", "maxfun", "lip", "reg", "stride", "start", "prox_mode", "prox_impl"]:
+    for k in [ "recon_opt", "iter", "maxfun", "lip", "reg", "stride", "start", "prox_mode", "prox_impl"]:
         v = getattr(args, k)
         if v is not None:
             cli_override[k] = v
@@ -267,7 +267,7 @@ def main():
     from tranPACT import TranPACTModel, TranPACTWaveSolver, GFJRSolver, OptimParam
 
     # -------------------------
-    # 7) load rec_pos
+    # 1) load rec_pos
     # -------------------------
     DTYPE = np.float32
     with StageTimer("load rec_pos"):
@@ -277,7 +277,7 @@ def main():
     log(f"rec_pos loaded: Nrec={Nrec}")
 
     # -------------------------
-    # 8) load pressure
+    # 2) load pressure
     # -------------------------
     with StageTimer("load forward pressure"):
         with h5py.File(pressure_data_path, "r") as f:
@@ -298,7 +298,7 @@ def main():
     log(f"Loaded forward: Nt_full={Nt_full}, Nrec={Nrec}, use Nt={Nt}, bytes={p0_forward.nbytes/1e9:.3f}GB")
 
     # -------------------------
-    # 9) fn
+    # 3) load fn
     # -------------------------
     with StageTimer("load fn"):
         if recon_opt == 2:
@@ -310,7 +310,7 @@ def main():
     log(f"fn shape={fn.shape}")
 
     # -------------------------
-    # 10) grid & ROI
+    # 4) grid & ROI
     # -------------------------
     cb = float(cfg.get("physics", {}).get("cb", 1.5))
     f0 = float(cfg.get("physics", {}).get("f0", 1.0))
@@ -365,7 +365,7 @@ def main():
     )
 
     # -------------------------
-    # 11) model + solver
+    # 5) model + solver
     # -------------------------
     with StageTimer("build model"):
         if recon_opt == 0:
@@ -419,7 +419,7 @@ def main():
         solver = TranPACTWaveSolver(model, rec_pos=rec_pos, Nt=Nt, dt=dt, to=to)
 
     # -------------------------
-    # 12) noise
+    # 6) load noise
     # -------------------------
     with StageTimer("load noise"):
         with h5py.File(noise_data_path, "r") as f:
@@ -436,7 +436,7 @@ def main():
             p0_forward += p0_noise * (noise_scale * noise_level)
 
     # -------------------------
-    # 13) saving dir + log file
+    # 7) saving dir + log file
     # -------------------------
     saving_dir = paths["saving_dir"]
     os.makedirs(saving_dir, exist_ok=True)
@@ -445,15 +445,10 @@ def main():
         with open(os.path.join(saving_dir, "args_record.json"), "w") as f:
             json.dump(cfg, f, indent=2)
 
-    log_path = os.path.join(saving_dir, f"run_fulltrace_rank{rank}.log")
-    logger.set_log_file(log_path)
-    log(f"LOG_FILE = {log_path}")
-
     # -------------------------
-    # 14) forward/adjoint wrapper
+    # 8) forward/adjoint wrapper
     # -------------------------
     def forward_wrapped(p0):
-        import numpy as np
 
         with StageTimer("DEVITO forward()"):
             out = solver.forward(p0)
@@ -469,7 +464,6 @@ def main():
         return out
 
     def adjoint_wrapped(p):
-        import numpy as np
 
         arr = np.asarray(p, dtype=np.float32)
         nt = solver.src.data.shape[0]
@@ -502,7 +496,7 @@ def main():
         return out
 
     # -------------------------
-    # 15) GFJR / FISTA params
+    # 9) GFJR / FISTA params
     # -------------------------
     opt_param = OptimParam(
         reg=reg_param,
@@ -557,7 +551,7 @@ def main():
         return
 
     # -------------------------
-    # 17) solve
+    # 10) solve
     # -------------------------
     if recon_opt == 0:
         c0 = np.array([2.898, 1.1256], dtype=DTYPE)

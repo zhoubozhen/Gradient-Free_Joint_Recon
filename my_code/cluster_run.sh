@@ -10,10 +10,39 @@ WORKDIR="${WORKDIR:-/home/bozhen2/Project/test}"
 LOG_ROOT="${LOG_ROOT:-/home/bozhen2/Project/test/logs}"
 
 mkdir -p "${LOG_ROOT}"
+
 TS="$(date +"%Y%m%d_%H%M%S")"
 LOG_FILE="${LOG_ROOT}/${TS}.log"
-touch "${LOG_FILE}"
-exec > >(tee -a "${LOG_FILE}") 2>&1
+
+# 先从 json 读取 saving_dir，让 cluster 日志也同步保存到 saving_dir/logs
+SAVING_DIR="$(python3 - <<'PY' "${CONFIG_PATH}"
+import json, sys
+
+cfg_path = sys.argv[1]
+with open(cfg_path, "r", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+paths = cfg.get("paths", {}) or {}
+saving_dir = paths.get("saving_dir", "")
+if not saving_dir:
+    raise SystemExit("[ERR] paths.saving_dir missing")
+
+print(saving_dir)
+PY
+)"
+
+SAVE_LOG_ROOT="${SAVING_DIR}/logs"
+mkdir -p "${SAVE_LOG_ROOT}"
+SAVE_LOG_FILE="${SAVE_LOG_ROOT}/${TS}.log"
+
+touch "${LOG_FILE}" "${SAVE_LOG_FILE}"
+
+# 从这里开始，所有 stdout/stderr 同时写两份完整日志
+if [[ "${LOG_FILE}" == "${SAVE_LOG_FILE}" ]]; then
+  exec > >(tee -a "${LOG_FILE}") 2>&1
+else
+  exec > >(tee -a "${LOG_FILE}" "${SAVE_LOG_FILE}") 2>&1
+fi
 
 module purge
 module load nvidia-hpc-sdk-multi/25.1-rh8
@@ -49,6 +78,7 @@ export DEVITO_ARCH=nvc
 export DEVITO_PLATFORM=nvidiaX
 
 ASSIGNED_UUIDS="${NVIDIA_VISIBLE_DEVICES:-${_CONDOR_AssignedGPUs:-}}"
+
 if [[ -z "${ASSIGNED_UUIDS}" ]]; then
   echo "ERROR: Condor did not provide NVIDIA_VISIBLE_DEVICES/_CONDOR_AssignedGPUs"
   env | grep -E 'NVIDIA_VISIBLE_DEVICES|_CONDOR_AssignedGPUs|CUDA_VISIBLE_DEVICES' || true
@@ -86,8 +116,11 @@ export PROX_NVIDIA_VISIBLE_DEVICES="${PROX_GPU_UUID}"
   echo "NEW_V2_ROOT : ${NEW_V2_ROOT}"
   echo "PYTHONPATH  : ${PYTHONPATH}"
   echo "CONFIG_PATH : ${CONFIG_PATH}"
+  echo "SAVING_DIR  : ${SAVING_DIR}"
   echo "LOG_ROOT    : ${LOG_ROOT}"
   echo "LOG_FILE    : ${LOG_FILE}"
+  echo "SAVE_LOG_ROOT : ${SAVE_LOG_ROOT}"
+  echo "SAVE_LOG_FILE : ${SAVE_LOG_FILE}"
   echo "ASSIGNED_UUIDS : ${ASSIGNED_UUIDS}"
   echo "MAIN_GPU_LIST  : ${MAIN_GPU_LIST}"
   echo "PROX_GPU_UUID  : ${PROX_GPU_UUID}"
@@ -131,6 +164,7 @@ mpirun -np "${NP}" \
   -x OMPI_CXX \
   bash -lc '
     set -euo pipefail
+
     IFS=, read -r -a GPUS <<< "$MAIN_GPU_LIST"
 
     if [[ ${OMPI_COMM_WORLD_RANK} -ge ${#GPUS[@]} ]]; then
@@ -147,6 +181,7 @@ mpirun -np "${NP}" \
 
     echo "[rank ${OMPI_COMM_WORLD_RANK}] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
     echo "[rank ${OMPI_COMM_WORLD_RANK}] PROX_CUDA_VISIBLE_DEVICES=${PROX_CUDA_VISIBLE_DEVICES}"
+    echo "[rank ${OMPI_COMM_WORLD_RANK}] CONFIG_PATH=${CONFIG_PATH}"
 
     python3 -u "${WORKDIR}/my_code/main.py" --config "${CONFIG_PATH}"
   '
